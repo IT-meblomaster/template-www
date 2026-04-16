@@ -3,13 +3,94 @@ declare(strict_types=1);
 
 $flashMessages = get_flash_messages();
 $currentPage = current_page();
+$menuTree = get_visible_menu_tree($pdo);
 
-$canManageUsers = has_permission($pdo, 'users.view') || has_permission($pdo, 'users.manage');
-$canManageRoles = has_permission($pdo, 'roles.view') || has_permission($pdo, 'roles.manage');
-$canManagePermissions = has_permission($pdo, 'permissions.view') || has_permission($pdo, 'permissions.manage');
+function render_menu_tree(array $items, string $currentPage, int $level = 0): void
+{
+    foreach ($items as $item) {
+        $slug = (string) ($item['slug'] ?? '');
+        $title = (string) ($item['title'] ?? '');
+        $children = $item['children'] ?? [];
+        $hasChildren = is_array($children) && $children !== [];
 
-$showAccessMenu = $canManageUsers || $canManageRoles || $canManagePermissions;
-$settingsActive = in_array($currentPage, ['users', 'user_form', 'roles', 'permissions'], true);
+        $isActive = $currentPage === $slug;
+        if (!$isActive && $hasChildren) {
+            foreach ($children as $child) {
+                $childSlug = (string) ($child['slug'] ?? '');
+                $grandChildren = $child['children'] ?? [];
+
+                if ($currentPage === $childSlug) {
+                    $isActive = true;
+                    break;
+                }
+
+                if (is_array($grandChildren)) {
+                    foreach ($grandChildren as $grandChild) {
+                        if ($currentPage === (string) ($grandChild['slug'] ?? '')) {
+                            $isActive = true;
+                            break 2;
+                        }
+                    }
+                }
+            }
+        }
+
+        if ($level === 0) {
+            if ($hasChildren) {
+                ?>
+                <li class="nav-item dropdown">
+                    <a
+                        class="nav-link dropdown-toggle <?= $isActive ? 'active' : '' ?>"
+                        href="#"
+                        role="button"
+                        data-bs-toggle="dropdown"
+                        aria-expanded="false"
+                    >
+                        <?= e($title) ?>
+                    </a>
+                    <ul class="dropdown-menu">
+                        <?php render_menu_tree($children, $currentPage, 1); ?>
+                    </ul>
+                </li>
+                <?php
+            } else {
+                ?>
+                <li class="nav-item">
+                    <a class="nav-link <?= $isActive ? 'active' : '' ?>" href="index.php?page=<?= e($slug) ?>">
+                        <?= e($title) ?>
+                    </a>
+                </li>
+                <?php
+            }
+            continue;
+        }
+
+        if ($hasChildren) {
+            ?>
+            <li class="dropdown-submenu">
+                <a
+                    class="dropdown-item dropdown-toggle <?= $isActive ? 'active' : '' ?>"
+                    href="#"
+                    onclick="return false;"
+                >
+                    <?= e($title) ?>
+                </a>
+                <ul class="dropdown-menu">
+                    <?php render_menu_tree($children, $currentPage, $level + 1); ?>
+                </ul>
+            </li>
+            <?php
+        } else {
+            ?>
+            <li>
+                <a class="dropdown-item <?= $isActive ? 'active' : '' ?>" href="index.php?page=<?= e($slug) ?>">
+                    <?= e($title) ?>
+                </a>
+            </li>
+            <?php
+        }
+    }
+}
 ?>
 <!doctype html>
 <html lang="pl">
@@ -50,71 +131,7 @@ $settingsActive = in_array($currentPage, ['users', 'user_form', 'roles', 'permis
 
         <div class="collapse navbar-collapse" id="mainNav">
             <ul class="navbar-nav me-auto">
-                <li class="nav-item">
-                    <a class="nav-link <?= $currentPage === 'home' ? 'active' : '' ?>" href="index.php?page=home">
-                        Start
-                    </a>
-                </li>
-
-                <?php if (can_access_page($pdo, 'dashboard')): ?>
-                    <li class="nav-item">
-                        <a class="nav-link <?= $currentPage === 'dashboard' ? 'active' : '' ?>" href="index.php?page=dashboard">
-                            Dashboard
-                        </a>
-                    </li>
-                <?php endif; ?>
-
-                <?php if ($showAccessMenu): ?>
-                    <li class="nav-item dropdown">
-                        <a
-                            class="nav-link dropdown-toggle <?= $settingsActive ? 'active' : '' ?>"
-                            href="#"
-                            role="button"
-                            data-bs-toggle="dropdown"
-                            aria-expanded="false"
-                        >
-                            Ustawienia
-                        </a>
-
-                        <ul class="dropdown-menu">
-                            <li class="dropdown-submenu">
-                                <a
-                                    class="dropdown-item dropdown-toggle"
-                                    href="#"
-                                    onclick="return false;"
-                                >
-                                    Zarządzaj dostępem
-                                </a>
-
-                                <ul class="dropdown-menu">
-                                    <?php if ($canManageUsers): ?>
-                                        <li>
-                                            <a class="dropdown-item <?= in_array($currentPage, ['users', 'user_form'], true) ? 'active' : '' ?>" href="index.php?page=users">
-                                                Użytkownicy
-                                            </a>
-                                        </li>
-                                    <?php endif; ?>
-
-                                    <?php if ($canManageRoles): ?>
-                                        <li>
-                                            <a class="dropdown-item <?= $currentPage === 'roles' ? 'active' : '' ?>" href="index.php?page=roles">
-                                                Role
-                                            </a>
-                                        </li>
-                                    <?php endif; ?>
-
-                                    <?php if ($canManagePermissions): ?>
-                                        <li>
-                                            <a class="dropdown-item <?= $currentPage === 'permissions' ? 'active' : '' ?>" href="index.php?page=permissions">
-                                                Uprawnienia
-                                            </a>
-                                        </li>
-                                    <?php endif; ?>
-                                </ul>
-                            </li>
-                        </ul>
-                    </li>
-                <?php endif; ?>
+                <?php render_menu_tree($menuTree, $currentPage); ?>
             </ul>
 
             <ul class="navbar-nav">
