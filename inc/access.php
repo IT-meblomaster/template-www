@@ -51,28 +51,68 @@ function get_page_permissions(PDO $pdo, string $pageSlug): array
     return array_column($stmt->fetchAll(), 'name');
 }
 
-function is_page_public(PDO $pdo, string $pageSlug): bool
+function get_page_by_slug(PDO $pdo, string $pageSlug): ?array
 {
     $stmt = $pdo->prepare("
-        SELECT is_public
+        SELECT id, parent_id, slug, title, is_public, menu_visible, sort_order
         FROM pages
         WHERE slug = :slug
         LIMIT 1
     ");
     $stmt->execute(['slug' => $pageSlug]);
-    $row = $stmt->fetch();
+    $page = $stmt->fetch();
 
-    if (!$row) {
+    return $page ?: null;
+}
+
+function is_page_public(PDO $pdo, string $pageSlug): bool
+{
+    $page = get_page_by_slug($pdo, $pageSlug);
+
+    if (!$page) {
         return false;
     }
 
-    return (int) $row['is_public'] === 1;
+    return (int) $page['is_public'] === 1;
+}
+
+function page_has_children(PDO $pdo, int $pageId): bool
+{
+    $stmt = $pdo->prepare("
+        SELECT COUNT(*)
+        FROM pages
+        WHERE parent_id = :parent_id
+    ");
+    $stmt->execute(['parent_id' => $pageId]);
+
+    return (int) $stmt->fetchColumn() > 0;
+}
+
+function is_menu_container(PDO $pdo, string $pageSlug): bool
+{
+    $page = get_page_by_slug($pdo, $pageSlug);
+
+    if (!$page) {
+        return false;
+    }
+
+    return page_has_children($pdo, (int) $page['id']);
 }
 
 function can_access_page(PDO $pdo, string $pageSlug): bool
 {
-    if (is_page_public($pdo, $pageSlug)) {
+    $page = get_page_by_slug($pdo, $pageSlug);
+
+    if (!$page) {
+        return false;
+    }
+
+    if ((int) $page['is_public'] === 1) {
         return true;
+    }
+
+    if (page_has_children($pdo, (int) $page['id'])) {
+        return false;
     }
 
     if (!is_logged_in()) {
@@ -107,7 +147,11 @@ function get_menu_pages(PDO $pdo): array
             sort_order
         FROM pages
         WHERE menu_visible = 1
-        ORDER BY parent_id IS NULL DESC, parent_id ASC, sort_order ASC, title ASC
+        ORDER BY
+            CASE WHEN parent_id IS NULL THEN 0 ELSE 1 END,
+            parent_id,
+            sort_order,
+            title
     ");
 
     return $stmt->fetchAll();
@@ -118,8 +162,6 @@ function get_visible_menu_tree(PDO $pdo): array
     $pages = get_menu_pages($pdo);
 
     $indexed = [];
-    $tree = [];
-
     foreach ($pages as $page) {
         $page['children'] = [];
         $indexed[(int) $page['id']] = $page;
@@ -127,18 +169,21 @@ function get_visible_menu_tree(PDO $pdo): array
 
     foreach ($indexed as $id => $page) {
         $slug = (string) $page['slug'];
-        $hasChildren = false;
+        $isContainer = false;
 
         foreach ($indexed as $candidate) {
-            if ((int) ($candidate['parent_id'] ?? 0) === $id) {
-                $hasChildren = true;
+            $candidateParentId = $candidate['parent_id'] !== null ? (int) $candidate['parent_id'] : null;
+            if ($candidateParentId === $id) {
+                $isContainer = true;
                 break;
             }
         }
 
-        $visible = $hasChildren ? true : can_access_page($pdo, $slug);
+        if ($isContainer) {
+            continue;
+        }
 
-        if (!$visible) {
+        if (!can_access_page($pdo, $slug)) {
             unset($indexed[$id]);
         }
     }
@@ -148,10 +193,26 @@ function get_visible_menu_tree(PDO $pdo): array
 
         if ($parentId !== null && isset($indexed[$parentId])) {
             $indexed[$parentId]['children'][] = &$indexed[$id];
-        } else {
+        }
+    }
+
+    $tree = [];
+
+    foreach ($indexed as $id => $page) {
+        $parentId = $page['parent_id'] !== null ? (int) $page['parent_id'] : null;
+
+        if ($parentId === null) {
             $tree[] = &$indexed[$id];
         }
     }
+
+    $tree = array_values(array_filter($tree, static function (array $item): bool {
+        if (!empty($item['children'])) {
+            return true;
+        }
+
+        return true;
+    }));
 
     return $tree;
 }
