@@ -7,37 +7,6 @@ if (!has_permission($pdo, 'users.view') && !has_permission($pdo, 'users.manage')
     return;
 }
 
-function user_has_role(PDO $pdo, int $userId, string $roleName): bool
-{
-    $stmt = $pdo->prepare("
-        SELECT COUNT(*)
-        FROM user_roles ur
-        INNER JOIN roles r ON r.id = ur.role_id
-        WHERE ur.user_id = :user_id
-          AND r.name = :role_name
-    ");
-    $stmt->execute([
-        'user_id' => $userId,
-        'role_name' => $roleName,
-    ]);
-
-    return (int) $stmt->fetchColumn() > 0;
-}
-
-function count_active_administrators(PDO $pdo): int
-{
-    $stmt = $pdo->query("
-        SELECT COUNT(DISTINCT u.id)
-        FROM users u
-        INNER JOIN user_roles ur ON ur.user_id = u.id
-        INNER JOIN roles r ON r.id = ur.role_id
-        WHERE u.is_active = 1
-          AND r.name = 'Administrator'
-    ");
-
-    return (int) $stmt->fetchColumn();
-}
-
 $editingUserId = isset($_GET['edit']) ? (int) $_GET['edit'] : 0;
 $errors = [];
 $openModal = false;

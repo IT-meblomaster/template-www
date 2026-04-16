@@ -7,20 +7,6 @@ if (!has_permission($pdo, 'roles.view') && !has_permission($pdo, 'roles.manage')
     return;
 }
 
-function count_users_with_role(PDO $pdo, string $roleName): int
-{
-    $stmt = $pdo->prepare("
-        SELECT COUNT(DISTINCT u.id)
-        FROM users u
-        INNER JOIN user_roles ur ON ur.user_id = u.id
-        INNER JOIN roles r ON r.id = ur.role_id
-        WHERE r.name = :role_name
-    ");
-    $stmt->execute(['role_name' => $roleName]);
-
-    return (int) $stmt->fetchColumn();
-}
-
 $errors = [];
 $editingRoleId = isset($_GET['edit']) ? (int) $_GET['edit'] : 0;
 $openModal = false;
