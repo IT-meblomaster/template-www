@@ -7,6 +7,37 @@ if (!has_permission($pdo, 'users.view') && !has_permission($pdo, 'users.manage')
     return;
 }
 
+function user_has_role(PDO $pdo, int $userId, string $roleName): bool
+{
+    $stmt = $pdo->prepare("
+        SELECT COUNT(*)
+        FROM user_roles ur
+        INNER JOIN roles r ON r.id = ur.role_id
+        WHERE ur.user_id = :user_id
+          AND r.name = :role_name
+    ");
+    $stmt->execute([
+        'user_id' => $userId,
+        'role_name' => $roleName,
+    ]);
+
+    return (int) $stmt->fetchColumn() > 0;
+}
+
+function count_active_administrators(PDO $pdo): int
+{
+    $stmt = $pdo->query("
+        SELECT COUNT(DISTINCT u.id)
+        FROM users u
+        INNER JOIN user_roles ur ON ur.user_id = u.id
+        INNER JOIN roles r ON r.id = ur.role_id
+        WHERE u.is_active = 1
+          AND r.name = 'Administrator'
+    ");
+
+    return (int) $stmt->fetchColumn();
+}
+
 $editingUserId = isset($_GET['edit']) ? (int) $_GET['edit'] : 0;
 $errors = [];
 $openModal = false;
@@ -39,6 +70,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'toggle_active' && $userId > 0) {
         if ($userId === current_user_id()) {
             set_flash('danger', 'Nie możesz zmienić statusu własnego konta.');
+            redirect('index.php?page=users');
+        }
+
+        $stmt = $pdo->prepare('SELECT is_active FROM users WHERE id = :id LIMIT 1');
+        $stmt->execute(['id' => $userId]);
+        $targetUser = $stmt->fetch();
+
+        if (!$targetUser) {
+            set_flash('danger', 'Nie znaleziono użytkownika.');
+            redirect('index.php?page=users');
+        }
+
+        $currentlyActive = (int) $targetUser['is_active'] === 1;
+        $isAdmin = user_has_role($pdo, $userId, 'Administrator');
+
+        if ($currentlyActive && $isAdmin && count_active_administrators($pdo) <= 1) {
+            set_flash('danger', 'Nie można dezaktywować ostatniego aktywnego administratora.');
             redirect('index.php?page=users');
         }
 
@@ -113,6 +161,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!in_array($roleId, $validRoleIds, true)) {
                 $errors[] = 'Wybrano nieprawidłową rolę.';
                 break;
+            }
+        }
+
+        $selectedRoleNames = [];
+        foreach ($roles as $role) {
+            if (in_array((int) $role['id'], $selectedRoles, true)) {
+                $selectedRoleNames[] = (string) $role['name'];
+            }
+        }
+
+        if ($isEdit) {
+            $stmt = $pdo->prepare('SELECT is_active FROM users WHERE id = :id LIMIT 1');
+            $stmt->execute(['id' => $userId]);
+            $existingUser = $stmt->fetch();
+
+            if ($existingUser) {
+                $wasActive = (int) $existingUser['is_active'] === 1;
+                $willBeActive = $isActive === 1;
+                $willBeAdmin = in_array('Administrator', $selectedRoleNames, true);
+                $wasAdmin = user_has_role($pdo, $userId, 'Administrator');
+
+                if ($userId === current_user_id() && !$willBeActive) {
+                    $errors[] = 'Nie możesz wyłączyć własnego konta.';
+                }
+
+                if ($wasActive && $wasAdmin && (!$willBeActive || !$willBeAdmin) && count_active_administrators($pdo) <= 1) {
+                    $errors[] = 'Nie można odebrać aktywności lub roli ostatniemu aktywnemu administratorowi.';
+                }
             }
         }
 
@@ -253,7 +329,11 @@ $users = $stmt->fetchAll();
                                         Edytuj
                                     </a>
 
-                                    <form method="post" class="d-inline">
+                                    <form
+                                        method="post"
+                                        class="d-inline"
+                                        onsubmit="return confirm('Czy na pewno chcesz zmienić status tego użytkownika?');"
+                                    >
                                         <?= csrf_input() ?>
                                         <input type="hidden" name="action" value="toggle_active">
                                         <input type="hidden" name="user_id" value="<?= (int) $row['id'] ?>">
