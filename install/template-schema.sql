@@ -75,6 +75,7 @@ CREATE TABLE role_permissions (
 
 CREATE TABLE pages (
     id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    parent_id INT UNSIGNED DEFAULT NULL,
     slug VARCHAR(100) NOT NULL,
     title VARCHAR(150) NOT NULL,
     is_public TINYINT(1) NOT NULL DEFAULT 0,
@@ -83,7 +84,12 @@ CREATE TABLE pages (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
-    UNIQUE KEY uq_pages_slug (slug)
+    UNIQUE KEY uq_pages_slug (slug),
+    KEY idx_pages_parent_id (parent_id),
+    CONSTRAINT fk_pages_parent
+        FOREIGN KEY (parent_id) REFERENCES pages(id)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE page_permissions (
@@ -115,14 +121,26 @@ INSERT INTO permissions (name, description) VALUES
 ('pages.view', 'Podgląd stron'),
 ('pages.manage', 'Zarządzanie dostępem do stron');
 
-INSERT INTO pages (slug, title, is_public, menu_visible, sort_order) VALUES
-('home', 'Start', 1, 1, 10),
-('login', 'Logowanie', 1, 0, 20),
-('dashboard', 'Dashboard', 0, 1, 30),
-('users', 'Użytkownicy', 0, 1, 40),
-('roles', 'Role', 0, 1, 50),
-('permissions', 'Uprawnienia', 0, 1, 60),
-('forbidden', 'Brak dostępu', 1, 0, 999);
+INSERT INTO pages (slug, title, parent_id, is_public, menu_visible, sort_order) VALUES
+('home', 'Start', NULL, 1, 1, 10),
+('login', 'Logowanie', NULL, 1, 0, 20),
+('dashboard', 'Dashboard', NULL, 0, 1, 20),
+('settings', 'Ustawienia', NULL, 0, 1, 50),
+('access_management', 'Zarządzaj dostępem', NULL, 0, 1, 10),
+('users', 'Użytkownicy', NULL, 0, 1, 10),
+('roles', 'Role', NULL, 0, 1, 20),
+('permissions', 'Uprawnienia', NULL, 0, 1, 30),
+('forbidden', 'Brak dostępu', NULL, 1, 0, 999);
+
+UPDATE pages child
+JOIN pages parent ON parent.slug = 'settings'
+SET child.parent_id = parent.id
+WHERE child.slug = 'access_management';
+
+UPDATE pages child
+JOIN pages parent ON parent.slug = 'access_management'
+SET child.parent_id = parent.id
+WHERE child.slug IN ('users', 'roles', 'permissions');
 
 INSERT INTO role_permissions (role_id, permission_id)
 SELECT r.id, p.id

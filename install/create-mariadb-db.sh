@@ -61,7 +61,7 @@ echo "Importuję plik SQL..."
 mysql -h "$DB_HOST" -u "$ADMIN_USER" "-p$ADMIN_PASS" --default-character-set=utf8mb4 "$DB_NAME" < "$SQL_FILE"
 
 echo "Sprawdzam wymagane tabele..."
-for tbl in users roles user_roles; do
+for tbl in users roles permissions user_roles role_permissions pages page_permissions; do
   EXISTS=$("${MYSQL_DB[@]}" -e "SHOW TABLES LIKE '$tbl';")
   if [ "$EXISTS" != "$tbl" ]; then
     echo "Błąd: brak tabeli $tbl"
@@ -76,6 +76,13 @@ if [ "$ROLE_EXISTS" = "0" ]; then
   exit 1
 fi
 
+echo "Sprawdzam strukturę menu..."
+PAGES_EXISTS=$("${MYSQL_DB[@]}" -e "SELECT COUNT(*) FROM pages WHERE slug IN ('home','dashboard','settings','access_management','users','roles','permissions');")
+if [ "$PAGES_EXISTS" -lt 7 ]; then
+  echo "Błąd: brakuje wymaganych wpisów w tabeli pages."
+  exit 1
+fi
+
 echo "Generuję hash hasła użytkownika aplikacyjnego..."
 APP_ADMIN_HASH="$(php -r 'echo password_hash("admin", PASSWORD_DEFAULT);')"
 
@@ -84,14 +91,16 @@ if [ -z "$APP_ADMIN_HASH" ]; then
   exit 1
 fi
 
-echo "Tworzę użytkownika aplikacyjnego admin..."
+echo "Tworzę lub aktualizuję użytkownika aplikacyjnego admin..."
 "${MYSQL_DB[@]}" -e "
 INSERT INTO users (username, email, password_hash, first_name, last_name, is_active)
-SELECT '$APP_ADMIN_USER', '$APP_ADMIN_EMAIL', '$APP_ADMIN_HASH', 'System', 'Administrator', 1
-FROM DUAL
-WHERE NOT EXISTS (
-    SELECT 1 FROM users WHERE username = '$APP_ADMIN_USER'
-);
+VALUES ('$APP_ADMIN_USER', '$APP_ADMIN_EMAIL', '$APP_ADMIN_HASH', 'System', 'Administrator', 1)
+ON DUPLICATE KEY UPDATE
+    email = VALUES(email),
+    password_hash = VALUES(password_hash),
+    first_name = VALUES(first_name),
+    last_name = VALUES(last_name),
+    is_active = VALUES(is_active);
 "
 
 echo "Przypisuję rolę Administrator..."
@@ -124,7 +133,7 @@ if [ "$USER_COUNT" != "1" ]; then
   exit 1
 fi
 
-if [ "$ROLE_COUNT" != "1" ]; then
+if [ "$ROLE_COUNT" -lt "1" ]; then
   echo "Błąd: rola Administrator nie została przypisana użytkownikowi admin."
   exit 1
 fi
@@ -144,4 +153,7 @@ FROM user_roles ur
 JOIN users u ON u.id = ur.user_id
 JOIN roles r ON r.id = ur.role_id
 WHERE u.username = '$APP_ADMIN_USER';
+SELECT id, slug, title, parent_id, is_public, menu_visible, sort_order
+FROM pages
+ORDER BY sort_order, title;
 "
