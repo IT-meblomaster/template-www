@@ -7,6 +7,20 @@ if (!has_permission($pdo, 'roles.view') && !has_permission($pdo, 'roles.manage')
     return;
 }
 
+function count_users_with_role(PDO $pdo, string $roleName): int
+{
+    $stmt = $pdo->prepare("
+        SELECT COUNT(DISTINCT u.id)
+        FROM users u
+        INNER JOIN user_roles ur ON ur.user_id = u.id
+        INNER JOIN roles r ON r.id = ur.role_id
+        WHERE r.name = :role_name
+    ");
+    $stmt->execute(['role_name' => $roleName]);
+
+    return (int) $stmt->fetchColumn();
+}
+
 $errors = [];
 $editingRoleId = isset($_GET['edit']) ? (int) $_GET['edit'] : 0;
 $openModal = false;
@@ -85,8 +99,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-        if ($originalRole && (string) $originalRole['name'] === 'Administrator' && $permissionIds === []) {
-            $errors[] = 'Rola Administrator nie może zostać bez uprawnień.';
+        if ($originalRole && (string) $originalRole['name'] === 'Administrator') {
+            $adminUsersCount = count_users_with_role($pdo, 'Administrator');
+
+            if ($adminUsersCount > 0 && $permissionIds === []) {
+                $errors[] = 'Nie można usunąć wszystkich uprawnień z roli Administrator, gdy jest przypisana do użytkowników.';
+            }
+
+            $requiredAdminPermissions = ['users.manage', 'roles.manage', 'permissions.manage'];
+            foreach ($requiredAdminPermissions as $requiredPermission) {
+                $requiredPermissionId = null;
+                foreach ($permissions as $permission) {
+                    if ((string) $permission['name'] === $requiredPermission) {
+                        $requiredPermissionId = (int) $permission['id'];
+                        break;
+                    }
+                }
+
+                if ($requiredPermissionId !== null && !in_array($requiredPermissionId, $permissionIds, true)) {
+                    $errors[] = 'Rola Administrator musi zachować kluczowe uprawnienie: ' . $requiredPermission . '.';
+                }
+            }
         }
 
         if (!$errors) {
