@@ -18,7 +18,6 @@ $systemSlugs = [
     'dashboard',
     'settings',
     'access_management',
-    'user_form',
 ];
 
 $menuContainerSlugs = [
@@ -30,7 +29,6 @@ $hiddenTechnicalSlugs = [
     'login',
     'logout',
     'forbidden',
-    'user_form',
 ];
 
 function get_page_depth(array $pagesById, ?int $pageId): int
@@ -61,6 +59,11 @@ function collect_descendant_ids(array $pagesById, int $pageId): array
     return $result;
 }
 
+function is_menu_container_slug(string $slug, array $menuContainerSlugs): bool
+{
+    return in_array($slug, $menuContainerSlugs, true);
+}
+
 $allPagesRaw = $pdo->query("
     SELECT id, slug, title, parent_id, is_public, menu_visible, sort_order
     FROM pages
@@ -88,6 +91,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $slug = trim((string) ($_POST['slug'] ?? ''));
         $title = trim((string) ($_POST['title'] ?? ''));
         $parentId = (int) ($_POST['parent_id'] ?? 0);
+        $pageType = (string) ($_POST['page_type'] ?? 'page');
         $isPublic = isset($_POST['is_public']) ? 1 : 0;
         $menuVisible = isset($_POST['menu_visible']) ? 1 : 0;
         $sortOrder = (int) ($_POST['sort_order'] ?? 100);
@@ -101,6 +105,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $isSystemPage = $originalPage && in_array((string) $originalPage['slug'], $systemSlugs, true);
+        $isContainer = $pageType === 'container' || in_array($slug, $menuContainerSlugs, true);
 
         if ($slug === '') {
             $errors[] = 'Slug strony jest wymagany.';
@@ -112,6 +117,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($title === '') {
             $errors[] = 'Tytuł strony jest wymagany.';
+        }
+
+        if (!in_array($pageType, ['page', 'container'], true)) {
+            $errors[] = 'Nieprawidłowy typ wpisu.';
         }
 
         if ($pageId > 0 && $isSystemPage && $originalPage && $slug !== $originalPage['slug']) {
@@ -145,18 +154,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($futureDepth > 3) {
                 $errors[] = 'Maksymalna głębokość menu to 3 poziomy.';
             }
+
+            $parentSlug = (string) $pagesById[$parentId]['slug'];
+            if (in_array($parentSlug, $hiddenTechnicalSlugs, true)) {
+                $errors[] = 'Nie można użyć strony technicznej jako rodzica w menu.';
+            }
         }
 
         if (in_array($slug, $hiddenTechnicalSlugs, true) && $menuVisible === 1) {
             $errors[] = 'Ta strona techniczna nie może być widoczna w menu.';
         }
 
-        if (in_array($slug, $menuContainerSlugs, true) && $isPublic === 1) {
+        if ($isContainer && $isPublic === 1) {
             $errors[] = 'Kontener menu nie może być stroną publiczną.';
         }
 
-        if (in_array($slug, $menuContainerSlugs, true) && $permissionIds !== []) {
+        if ($isContainer && $permissionIds !== []) {
             $errors[] = 'Kontener menu nie powinien mieć własnych wymaganych uprawnień.';
+        }
+
+        if (!$isContainer && in_array($slug, $menuContainerSlugs, true)) {
+            $errors[] = 'Ten wpis systemowy musi pozostać kontenerem menu.';
         }
 
         if (!$errors) {
@@ -178,7 +196,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'slug' => $slug,
                         'title' => $title,
                         'parent_id' => $parentId,
-                        'is_public' => $isPublic,
+                        'is_public' => $isContainer ? 0 : $isPublic,
                         'menu_visible' => $menuVisible,
                         'sort_order' => $sortOrder,
                         'id' => $pageId,
@@ -192,7 +210,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'slug' => $slug,
                         'title' => $title,
                         'parent_id' => $parentId,
-                        'is_public' => $isPublic,
+                        'is_public' => $isContainer ? 0 : $isPublic,
                         'menu_visible' => $menuVisible,
                         'sort_order' => $sortOrder,
                     ]);
@@ -202,7 +220,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $pdo->prepare('DELETE FROM page_permissions WHERE page_id = :page_id')
                     ->execute(['page_id' => $pageId]);
 
-                if (!in_array($slug, $menuContainerSlugs, true) && !$isPublic && $permissionIds) {
+                if (!$isContainer && !$isPublic && $permissionIds) {
                     $stmt = $pdo->prepare('
                         INSERT INTO page_permissions (page_id, permission_id)
                         VALUES (:page_id, :permission_id)
@@ -240,6 +258,7 @@ $pageToEdit = [
 $pagePermissionIds = [];
 $modalTitle = 'Dodaj stronę';
 $openModal = false;
+$pageType = 'page';
 
 if ($editingPageId > 0) {
     $stmt = $pdo->prepare('SELECT * FROM pages WHERE id = :id LIMIT 1');
@@ -248,6 +267,7 @@ if ($editingPageId > 0) {
 
     if ($found) {
         $pageToEdit = $found;
+        $pageType = in_array((string) $pageToEdit['slug'], $menuContainerSlugs, true) ? 'container' : 'page';
         $modalTitle = 'Edytuj stronę: ' . ($pageToEdit['title'] ?: $pageToEdit['slug']);
         $openModal = true;
 
@@ -268,6 +288,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $errors) {
         'sort_order' => (int) ($_POST['sort_order'] ?? 100),
     ];
     $pagePermissionIds = array_map('intval', $_POST['permissions'] ?? []);
+    $pageType = in_array((string) ($_POST['page_type'] ?? 'page'), ['page', 'container'], true)
+        ? (string) $_POST['page_type']
+        : 'page';
     $modalTitle = $pageToEdit['id'] > 0 ? 'Edytuj stronę' : 'Dodaj stronę';
     $openModal = true;
 }
@@ -308,11 +331,9 @@ $permissions = $pdo->query("
     ORDER BY name
 ")->fetchAll();
 
-$parentOptions = $pdo->query("
-    SELECT id, slug, title, parent_id
-    FROM pages
-    ORDER BY sort_order, title
-")->fetchAll();
+$parentOptions = array_filter($allPagesRaw, static function (array $page) use ($hiddenTechnicalSlugs): bool {
+    return !in_array((string) $page['slug'], $hiddenTechnicalSlugs, true);
+});
 ?>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -331,6 +352,7 @@ $parentOptions = $pdo->query("
                         <th>ID</th>
                         <th>Slug</th>
                         <th>Tytuł</th>
+                        <th>Typ</th>
                         <th>Rodzic</th>
                         <th>Publiczna</th>
                         <th>Menu</th>
@@ -341,10 +363,18 @@ $parentOptions = $pdo->query("
                     </thead>
                     <tbody>
                     <?php foreach ($pages as $pageRow): ?>
+                        <?php $rowIsContainer = in_array((string) $pageRow['slug'], $menuContainerSlugs, true); ?>
                         <tr>
                             <td><?= (int) $pageRow['id'] ?></td>
                             <td><code><?= e($pageRow['slug']) ?></code></td>
                             <td><?= e($pageRow['title']) ?></td>
+                            <td>
+                                <?php if ($rowIsContainer): ?>
+                                    <span class="badge text-bg-dark">Kontener</span>
+                                <?php else: ?>
+                                    <span class="badge text-bg-secondary">Strona</span>
+                                <?php endif; ?>
+                            </td>
                             <td><?= e($pageRow['parent_title'] ?: '-') ?></td>
                             <td>
                                 <?php if ((int) $pageRow['is_public'] === 1): ?>
@@ -429,6 +459,14 @@ $parentOptions = $pdo->query("
                             </div>
 
                             <div class="col-md-6">
+                                <label class="form-label">Typ wpisu</label>
+                                <select name="page_type" class="form-select">
+                                    <option value="page" <?= $pageType === 'page' ? 'selected' : '' ?>>Zwykła strona</option>
+                                    <option value="container" <?= $pageType === 'container' ? 'selected' : '' ?>>Kontener menu</option>
+                                </select>
+                            </div>
+
+                            <div class="col-md-6">
                                 <label class="form-label">Rodzic w menu</label>
                                 <select name="parent_id" class="form-select">
                                     <option value="0">— brak —</option>
@@ -506,7 +544,7 @@ $parentOptions = $pdo->query("
                                     <?php endforeach; ?>
                                 </div>
                                 <div class="form-text">
-                                    Jeżeli strona jest publiczna, zaznaczone uprawnienia nie będą wymagane.
+                                    Dla kontenera menu uprawnienia nie są używane.
                                 </div>
                             </div>
                         </div>
