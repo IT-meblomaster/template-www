@@ -1,24 +1,36 @@
 #!/usr/bin/env bash
+#
+# script to create database and database user
+# usage: ./create-mariadb-db.sh database_new_name database_new_user 'databese_new_password'
+#
 set -euo pipefail
 
-if [ "$#" -ne 4 ]; then
-  echo "Użycie: $0 <nazwa_bazy> <nazwa_uzytkownika_db> <haslo_uzytkownika_db> <plik_sql>"
-  echo "Przykład: $0 template_www template_user 'MocneHaslo123!' ./template-schema.sql"
+if [ "$#" -ne 3 ]; then
+  echo "Użycie: $0 <nazwa_bazy> <nazwa_uzytkownika_db> <haslo_uzytkownika_db>"
+  echo "Przykład: $0 template_www template_user 'MocneHaslo123!'"
   exit 1
 fi
 
 DB_NAME="$1"
 DB_USER="$2"
 DB_PASS="$3"
-SQL_FILE="$4"
 DB_HOST="localhost"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCHEMA_FILE="$SCRIPT_DIR/template-schema.sql"
+SEED_FILE="$SCRIPT_DIR/template-seed.sql"
 
 APP_ADMIN_USER="admin"
 APP_ADMIN_PASS="admin"
 APP_ADMIN_EMAIL="admin@localhost"
 
-if [ ! -f "$SQL_FILE" ]; then
-  echo "Błąd: plik SQL nie istnieje: $SQL_FILE"
+if [ ! -f "$SCHEMA_FILE" ]; then
+  echo "Błąd: brak pliku schema: $SCHEMA_FILE"
+  exit 1
+fi
+
+if [ ! -f "$SEED_FILE" ]; then
+  echo "Błąd: brak pliku seed: $SEED_FILE"
   exit 1
 fi
 
@@ -57,8 +69,11 @@ GRANT ALL PRIVILEGES ON \`$DB_NAME\`.* TO '$DB_USER'@'$DB_HOST';
 FLUSH PRIVILEGES;
 "
 
-echo "Importuję plik SQL..."
-mysql -h "$DB_HOST" -u "$ADMIN_USER" "-p$ADMIN_PASS" --default-character-set=utf8mb4 "$DB_NAME" < "$SQL_FILE"
+echo "Importuję schema..."
+mysql -h "$DB_HOST" -u "$ADMIN_USER" "-p$ADMIN_PASS" --default-character-set=utf8mb4 "$DB_NAME" < "$SCHEMA_FILE"
+
+echo "Importuję seed..."
+mysql -h "$DB_HOST" -u "$ADMIN_USER" "-p$ADMIN_PASS" --default-character-set=utf8mb4 "$DB_NAME" < "$SEED_FILE"
 
 echo "Sprawdzam wymagane tabele..."
 for tbl in users roles permissions user_roles role_permissions pages page_permissions; do
@@ -69,16 +84,15 @@ for tbl in users roles permissions user_roles role_permissions pages page_permis
   fi
 done
 
-echo "Sprawdzam rolę Administrator..."
+echo "Sprawdzam wymagane dane systemowe..."
 ROLE_EXISTS=$("${MYSQL_DB[@]}" -e "SELECT COUNT(*) FROM roles WHERE name='Administrator';")
 if [ "$ROLE_EXISTS" = "0" ]; then
   echo "Błąd: brak roli Administrator w tabeli roles."
   exit 1
 fi
 
-echo "Sprawdzam strukturę menu..."
 PAGES_EXISTS=$("${MYSQL_DB[@]}" -e "SELECT COUNT(*) FROM pages WHERE slug IN ('home','dashboard','settings','access_management','users','roles','permissions');")
-if [ "$PAGES_EXISTS" -lt 7 ]; then
+if [ "$PAGES_EXISTS" -lt "7" ]; then
   echo "Błąd: brakuje wymaganych wpisów w tabeli pages."
   exit 1
 fi
@@ -142,6 +156,8 @@ echo
 echo "Gotowe."
 echo "Baza danych:          $DB_NAME"
 echo "Użytkownik DB:        $DB_USER@$DB_HOST"
+echo "Schema:               $SCHEMA_FILE"
+echo "Seed:                 $SEED_FILE"
 echo "Użytkownik aplikacji: $APP_ADMIN_USER"
 echo "Hasło aplikacji:      $APP_ADMIN_PASS"
 echo
