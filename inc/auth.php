@@ -1,0 +1,153 @@
+<?php
+
+declare(strict_types=1);
+
+function start_session(array $config): void
+{
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        return;
+    }
+
+    session_name($config['security']['session_name'] ?? 'template_www_sess');
+
+    session_set_cookie_params([
+        'httponly' => true,
+        'secure' => !empty($_SERVER['HTTPS']),
+        'samesite' => 'Lax',
+        'path' => '/',
+    ]);
+
+    session_start();
+}
+
+function is_logged_in(): bool
+{
+    return !empty($_SESSION['user_id']);
+}
+
+function current_user_id(): ?int
+{
+    return isset($_SESSION['user_id']) ? (int) $_SESSION['user_id'] : null;
+}
+
+function current_user(PDO $pdo): ?array
+{
+    $userId = current_user_id();
+
+    if (!$userId) {
+        return null;
+    }
+
+    $stmt = $pdo->prepare('
+        SELECT id, username, email, first_name, last_name, is_active, last_login_at
+        FROM users
+        WHERE id = :id AND is_active = 1
+        LIMIT 1
+    ');
+    $stmt->execute([':id' => $userId]);
+    $user = $stmt->fetch();
+
+    return $user ?: null;
+}
+
+function login(PDO $pdo, string $username, string $password): bool
+{
+    $stmt = $pdo->prepare('
+        SELECT id, password_hash, is_active
+        FROM users
+        WHERE username = :username
+        LIMIT 1
+    ');
+    $stmt->execute([':username' => $username]);
+    $user = $stmt->fetch();
+
+    if (!$user || (int) $user['is_active'] !== 1) {
+        return false;
+    }
+
+    if (!password_verify($password, (string) $user['password_hash'])) {
+        return false;
+    }
+
+    session_regenerate_id(true);
+    $_SESSION['user_id'] = (int) $user['id'];
+
+    $update = $pdo->prepare('UPDATE users SET last_login_at = NOW() WHERE id = :id');
+    $update->execute([':id' => (int) $user['id']]);
+
+    return true;
+}
+
+function login_user(PDO $pdo, string $username, string $password): bool
+{
+    return login($pdo, $username, $password);
+}
+
+function logout(): void
+{
+    $_SESSION = [];
+
+    if (ini_get('session.use_cookies')) {
+        $params = session_get_cookie_params();
+        setcookie(
+            session_name(),
+            '',
+            time() - 42000,
+            $params['path'] ?? '/',
+            $params['domain'] ?? '',
+            (bool) ($params['secure'] ?? false),
+            (bool) ($params['httponly'] ?? true)
+        );
+    }
+
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_destroy();
+    }
+}
+
+function logout_user(): void
+{
+    logout();
+}
+
+function get_all_roles(PDO $pdo): array
+{
+    $stmt = $pdo->query('SELECT id, name, description FROM roles ORDER BY name');
+    return $stmt->fetchAll();
+}
+
+function get_user_role_ids(PDO $pdo, int $userId): array
+{
+    $stmt = $pdo->prepare('SELECT role_id FROM user_roles WHERE user_id = :user_id');
+    $stmt->execute(['user_id' => $userId]);
+
+    return array_map('intval', array_column($stmt->fetchAll(), 'role_id'));
+}
+
+function save_user_roles(PDO $pdo, int $userId, array $roleIds): void
+{
+    $roleIds = array_values(array_unique(array_map('intval', $roleIds)));
+
+    $pdo->prepare('DELETE FROM user_roles WHERE user_id = :user_id')
+        ->execute(['user_id' => $userId]);
+
+    if (!$roleIds) {
+        return;
+    }
+
+    $stmt = $pdo->prepare('
+        INSERT INTO user_roles (user_id, role_id)
+        VALUES (:user_id, :role_id)
+    ');
+
+    foreach ($roleIds as $roleId) {
+        if ($roleId <= 0) {
+            continue;
+        }
+
+        $stmt->execute([
+            'user_id' => $userId,
+            'role_id' => $roleId,
+        ]);
+    }
+}
