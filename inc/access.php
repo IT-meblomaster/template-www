@@ -66,7 +66,7 @@ function is_page_public(PDO $pdo, string $pageSlug): bool
         return false;
     }
 
-    return (int)$row['is_public'] === 1;
+    return (int) $row['is_public'] === 1;
 }
 
 function can_access_page(PDO $pdo, string $pageSlug): bool
@@ -82,7 +82,7 @@ function can_access_page(PDO $pdo, string $pageSlug): bool
     $requiredPermissions = get_page_permissions($pdo, $pageSlug);
 
     if (!$requiredPermissions) {
-        return true;
+        return false;
     }
 
     foreach ($requiredPermissions as $permission) {
@@ -94,25 +94,64 @@ function can_access_page(PDO $pdo, string $pageSlug): bool
     return false;
 }
 
-function get_visible_menu_pages(PDO $pdo): array
+function get_menu_pages(PDO $pdo): array
 {
     $stmt = $pdo->query("
-        SELECT slug, title, is_public, menu_visible, sort_order
+        SELECT
+            id,
+            slug,
+            title,
+            parent_id,
+            is_public,
+            menu_visible,
+            sort_order
         FROM pages
         WHERE menu_visible = 1
-        ORDER BY sort_order, title
+        ORDER BY parent_id IS NULL DESC, parent_id ASC, sort_order ASC, title ASC
     ");
-    $pages = $stmt->fetchAll();
 
-    $visible = [];
+    return $stmt->fetchAll();
+}
+
+function get_visible_menu_tree(PDO $pdo): array
+{
+    $pages = get_menu_pages($pdo);
+
+    $indexed = [];
+    $tree = [];
 
     foreach ($pages as $page) {
-        $slug = (string)$page['slug'];
+        $page['children'] = [];
+        $indexed[(int) $page['id']] = $page;
+    }
 
-        if (can_access_page($pdo, $slug)) {
-            $visible[] = $page;
+    foreach ($indexed as $id => $page) {
+        $slug = (string) $page['slug'];
+        $hasChildren = false;
+
+        foreach ($indexed as $candidate) {
+            if ((int) ($candidate['parent_id'] ?? 0) === $id) {
+                $hasChildren = true;
+                break;
+            }
+        }
+
+        $visible = $hasChildren ? true : can_access_page($pdo, $slug);
+
+        if (!$visible) {
+            unset($indexed[$id]);
         }
     }
 
-    return $visible;
+    foreach ($indexed as $id => $page) {
+        $parentId = $page['parent_id'] !== null ? (int) $page['parent_id'] : null;
+
+        if ($parentId !== null && isset($indexed[$parentId])) {
+            $indexed[$parentId]['children'][] = &$indexed[$id];
+        } else {
+            $tree[] = &$indexed[$id];
+        }
+    }
+
+    return $tree;
 }
