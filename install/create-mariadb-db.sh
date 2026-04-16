@@ -21,7 +21,6 @@ SCHEMA_FILE="$SCRIPT_DIR/template-schema.sql"
 SEED_FILE="$SCRIPT_DIR/template-seed.sql"
 
 APP_ADMIN_USER="admin"
-APP_ADMIN_PASS="admin"
 APP_ADMIN_EMAIL="admin@localhost"
 
 if [ ! -f "$SCHEMA_FILE" ]; then
@@ -47,6 +46,25 @@ fi
 read -r -p "Login admina MariaDB: " ADMIN_USER
 read -r -s -p "Hasło admina MariaDB: " ADMIN_PASS
 echo
+
+while true; do
+  read -r -s -p "Hasło dla użytkownika aplikacyjnego admin: " APP_ADMIN_PASS
+  echo
+  read -r -s -p "Powtórz hasło dla użytkownika aplikacyjnego admin: " APP_ADMIN_PASS_CONFIRM
+  echo
+
+  if [ -z "$APP_ADMIN_PASS" ]; then
+    echo "Hasło admina aplikacyjnego nie może być puste."
+    continue
+  fi
+
+  if [ "$APP_ADMIN_PASS" != "$APP_ADMIN_PASS_CONFIRM" ]; then
+    echo "Hasła nie są takie same. Spróbuj ponownie."
+    continue
+  fi
+
+  break
+done
 
 MYSQL_BASE=(mysql -h "$DB_HOST" -u "$ADMIN_USER" "-p$ADMIN_PASS" --default-character-set=utf8mb4 --batch --skip-column-names)
 MYSQL_DB=(mysql -h "$DB_HOST" -u "$ADMIN_USER" "-p$ADMIN_PASS" --default-character-set=utf8mb4 --batch --skip-column-names "$DB_NAME")
@@ -98,7 +116,7 @@ if [ "$PAGES_EXISTS" -lt "7" ]; then
 fi
 
 echo "Generuję hash hasła użytkownika aplikacyjnego..."
-APP_ADMIN_HASH="$(php -r 'echo password_hash("admin", PASSWORD_DEFAULT);')"
+APP_ADMIN_HASH="$(php -r "echo password_hash('$APP_ADMIN_PASS', PASSWORD_DEFAULT);")"
 
 if [ -z "$APP_ADMIN_HASH" ]; then
   echo "Błąd: nie udało się wygenerować hasha hasła."
@@ -159,7 +177,7 @@ echo "Użytkownik DB:        $DB_USER@$DB_HOST"
 echo "Schema:               $SCHEMA_FILE"
 echo "Seed:                 $SEED_FILE"
 echo "Użytkownik aplikacji: $APP_ADMIN_USER"
-echo "Hasło aplikacji:      $APP_ADMIN_PASS"
+echo "Email aplikacji:      $APP_ADMIN_EMAIL"
 echo
 echo "Weryfikacja:"
 mysql -h "$DB_HOST" -u "$ADMIN_USER" "-p$ADMIN_PASS" "$DB_NAME" -e "
