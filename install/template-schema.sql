@@ -33,16 +33,6 @@ CREATE TABLE `page_permissions` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Dumping data for table `page_permissions`
---
-
-LOCK TABLES `page_permissions` WRITE;
-/*!40000 ALTER TABLE `page_permissions` DISABLE KEYS */;
-INSERT INTO `page_permissions` VALUES (3,1),(4,2),(4,3),(5,4),(5,5),(6,6),(6,7);
-/*!40000 ALTER TABLE `page_permissions` ENABLE KEYS */;
-UNLOCK TABLES;
-
---
 -- Table structure for table `pages`
 --
 
@@ -67,16 +57,6 @@ CREATE TABLE `pages` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Dumping data for table `pages`
---
-
-LOCK TABLES `pages` WRITE;
-/*!40000 ALTER TABLE `pages` DISABLE KEYS */;
-INSERT INTO `pages` VALUES (1,NULL,'home','Start',1,1,10,'2026-04-16 10:27:06','2026-04-16 10:27:06'),(2,NULL,'login','Logowanie',1,0,20,'2026-04-16 10:27:06','2026-04-16 10:27:06'),(3,NULL,'dashboard','Dashboard',0,1,20,'2026-04-16 10:27:06','2026-04-16 12:30:39'),(4,9,'users','Użytkownicy',0,1,10,'2026-04-16 10:27:06','2026-04-16 12:30:39'),(5,9,'roles','Role',0,1,20,'2026-04-16 10:27:06','2026-04-16 12:30:39'),(6,9,'permissions','Uprawnienia',0,1,30,'2026-04-16 10:27:06','2026-04-16 12:30:39'),(7,NULL,'forbidden','Brak dostępu',1,0,999,'2026-04-16 10:27:06','2026-04-16 10:27:06'),(8,NULL,'settings','Ustawienia',0,1,50,'2026-04-16 12:29:24','2026-04-16 12:29:24'),(9,8,'access_management','Zarządzaj dostępem',0,1,10,'2026-04-16 12:29:24','2026-04-16 12:30:29');
-/*!40000 ALTER TABLE `pages` ENABLE KEYS */;
-UNLOCK TABLES;
-
---
 -- Table structure for table `permissions`
 --
 
@@ -91,16 +71,6 @@ CREATE TABLE `permissions` (
   UNIQUE KEY `uq_permissions_name` (`name`)
 ) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Dumping data for table `permissions`
---
-
-LOCK TABLES `permissions` WRITE;
-/*!40000 ALTER TABLE `permissions` DISABLE KEYS */;
-INSERT INTO `permissions` VALUES (1,'dashboard.view','Podgląd dashboardu'),(2,'users.view','Podgląd użytkowników'),(3,'users.manage','Zarządzanie użytkownikami'),(4,'roles.view','Podgląd ról'),(5,'roles.manage','Zarządzanie rolami'),(6,'permissions.view','Podgląd uprawnień'),(7,'permissions.manage','Zarządzanie uprawnieniami'),(8,'pages.view','Podgląd stron'),(9,'pages.manage','Zarządzanie dostępem do stron');
-/*!40000 ALTER TABLE `permissions` ENABLE KEYS */;
-UNLOCK TABLES;
 
 --
 -- Table structure for table `role_permissions`
@@ -120,16 +90,6 @@ CREATE TABLE `role_permissions` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Dumping data for table `role_permissions`
---
-
-LOCK TABLES `role_permissions` WRITE;
-/*!40000 ALTER TABLE `role_permissions` DISABLE KEYS */;
-INSERT INTO `role_permissions` VALUES (1,1),(1,2),(1,3),(1,4),(1,5),(1,6),(1,7),(1,8),(1,9),(2,1);
-/*!40000 ALTER TABLE `role_permissions` ENABLE KEYS */;
-UNLOCK TABLES;
-
---
 -- Table structure for table `roles`
 --
 
@@ -144,16 +104,6 @@ CREATE TABLE `roles` (
   UNIQUE KEY `uq_roles_name` (`name`)
 ) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Dumping data for table `roles`
---
-
-LOCK TABLES `roles` WRITE;
-/*!40000 ALTER TABLE `roles` DISABLE KEYS */;
-INSERT INTO `roles` VALUES (1,'Administrator','Pełny dostęp do systemu'),(2,'User','Podstawowy użytkownik');
-/*!40000 ALTER TABLE `roles` ENABLE KEYS */;
-UNLOCK TABLES;
 
 --
 -- Table structure for table `user_roles`
@@ -171,16 +121,6 @@ CREATE TABLE `user_roles` (
   CONSTRAINT `fk_user_roles_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Dumping data for table `user_roles`
---
-
-LOCK TABLES `user_roles` WRITE;
-/*!40000 ALTER TABLE `user_roles` DISABLE KEYS */;
-INSERT INTO `user_roles` VALUES (1,1);
-/*!40000 ALTER TABLE `user_roles` ENABLE KEYS */;
-UNLOCK TABLES;
 
 --
 -- Table structure for table `users`
@@ -205,16 +145,6 @@ CREATE TABLE `users` (
   UNIQUE KEY `uq_users_email` (`email`)
 ) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Dumping data for table `users`
---
-
-LOCK TABLES `users` WRITE;
-/*!40000 ALTER TABLE `users` DISABLE KEYS */;
-INSERT INTO `users` VALUES (1,'admin','admin@localhost','$2y$10$ywbq.VkZMrMzHweiyQ1WIuccuhIhrxxt1v8yT6RKq.pP0OWvH1ndi','System','Administrator',1,'2026-04-16 10:57:34','2026-04-16 10:27:06','2026-04-16 10:57:34');
-/*!40000 ALTER TABLE `users` ENABLE KEYS */;
-UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
@@ -225,4 +155,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-04-16 13:16:01
+-- Dump completed on 2026-04-16 13:25:54
