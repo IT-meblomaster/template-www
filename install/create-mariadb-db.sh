@@ -1,0 +1,147 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ "$#" -ne 4 ]; then
+  echo "Użycie: $0 <nazwa_bazy> <nazwa_uzytkownika_db> <haslo_uzytkownika_db> <plik_sql>"
+  echo "Przykład: $0 template_www template_user 'MocneHaslo123!' ./template-schema.sql"
+  exit 1
+fi
+
+DB_NAME="$1"
+DB_USER="$2"
+DB_PASS="$3"
+SQL_FILE="$4"
+DB_HOST="localhost"
+
+APP_ADMIN_USER="admin"
+APP_ADMIN_PASS="admin"
+APP_ADMIN_EMAIL="admin@localhost"
+
+if [ ! -f "$SQL_FILE" ]; then
+  echo "Błąd: plik SQL nie istnieje: $SQL_FILE"
+  exit 1
+fi
+
+if ! command -v mysql >/dev/null 2>&1; then
+  echo "Błąd: nie znaleziono polecenia mysql."
+  exit 1
+fi
+
+if ! command -v php >/dev/null 2>&1; then
+  echo "Błąd: nie znaleziono polecenia php."
+  exit 1
+fi
+
+read -r -p "Login admina MariaDB: " ADMIN_USER
+read -r -s -p "Hasło admina MariaDB: " ADMIN_PASS
+echo
+
+MYSQL_BASE=(mysql -h "$DB_HOST" -u "$ADMIN_USER" "-p$ADMIN_PASS" --default-character-set=utf8mb4 --batch --skip-column-names)
+MYSQL_DB=(mysql -h "$DB_HOST" -u "$ADMIN_USER" "-p$ADMIN_PASS" --default-character-set=utf8mb4 --batch --skip-column-names "$DB_NAME")
+
+echo "Sprawdzam połączenie z MariaDB..."
+"${MYSQL_BASE[@]}" -e "SELECT 1;" >/dev/null
+
+echo "Tworzę bazę danych..."
+"${MYSQL_BASE[@]}" -e "
+CREATE DATABASE IF NOT EXISTS \`$DB_NAME\`
+CHARACTER SET utf8mb4
+COLLATE utf8mb4_unicode_ci;
+"
+
+echo "Tworzę użytkownika bazy i nadaję uprawnienia..."
+"${MYSQL_BASE[@]}" -e "
+CREATE USER IF NOT EXISTS '$DB_USER'@'$DB_HOST' IDENTIFIED BY '$DB_PASS';
+ALTER USER '$DB_USER'@'$DB_HOST' IDENTIFIED BY '$DB_PASS';
+GRANT ALL PRIVILEGES ON \`$DB_NAME\`.* TO '$DB_USER'@'$DB_HOST';
+FLUSH PRIVILEGES;
+"
+
+echo "Importuję plik SQL..."
+mysql -h "$DB_HOST" -u "$ADMIN_USER" "-p$ADMIN_PASS" --default-character-set=utf8mb4 "$DB_NAME" < "$SQL_FILE"
+
+echo "Sprawdzam wymagane tabele..."
+for tbl in users roles user_roles; do
+  EXISTS=$("${MYSQL_DB[@]}" -e "SHOW TABLES LIKE '$tbl';")
+  if [ "$EXISTS" != "$tbl" ]; then
+    echo "Błąd: brak tabeli $tbl"
+    exit 1
+  fi
+done
+
+echo "Sprawdzam rolę Administrator..."
+ROLE_EXISTS=$("${MYSQL_DB[@]}" -e "SELECT COUNT(*) FROM roles WHERE name='Administrator';")
+if [ "$ROLE_EXISTS" = "0" ]; then
+  echo "Błąd: brak roli Administrator w tabeli roles."
+  exit 1
+fi
+
+echo "Generuję hash hasła użytkownika aplikacyjnego..."
+APP_ADMIN_HASH="$(php -r 'echo password_hash("admin", PASSWORD_DEFAULT);')"
+
+if [ -z "$APP_ADMIN_HASH" ]; then
+  echo "Błąd: nie udało się wygenerować hasha hasła."
+  exit 1
+fi
+
+echo "Tworzę użytkownika aplikacyjnego admin..."
+"${MYSQL_DB[@]}" -e "
+INSERT INTO users (username, email, password_hash, first_name, last_name, is_active)
+SELECT '$APP_ADMIN_USER', '$APP_ADMIN_EMAIL', '$APP_ADMIN_HASH', 'System', 'Administrator', 1
+FROM DUAL
+WHERE NOT EXISTS (
+    SELECT 1 FROM users WHERE username = '$APP_ADMIN_USER'
+);
+"
+
+echo "Przypisuję rolę Administrator..."
+"${MYSQL_DB[@]}" -e "
+INSERT INTO user_roles (user_id, role_id)
+SELECT u.id, r.id
+FROM users u
+JOIN roles r ON r.name = 'Administrator'
+WHERE u.username = '$APP_ADMIN_USER'
+AND NOT EXISTS (
+    SELECT 1
+    FROM user_roles ur
+    WHERE ur.user_id = u.id AND ur.role_id = r.id
+);
+"
+
+echo "Weryfikuję utworzenie użytkownika..."
+USER_COUNT=$("${MYSQL_DB[@]}" -e "SELECT COUNT(*) FROM users WHERE username = '$APP_ADMIN_USER';")
+ROLE_COUNT=$("${MYSQL_DB[@]}" -e "
+SELECT COUNT(*)
+FROM user_roles ur
+JOIN users u ON u.id = ur.user_id
+JOIN roles r ON r.id = ur.role_id
+WHERE u.username = '$APP_ADMIN_USER'
+  AND r.name = 'Administrator';
+")
+
+if [ "$USER_COUNT" != "1" ]; then
+  echo "Błąd: użytkownik admin nie został utworzony."
+  exit 1
+fi
+
+if [ "$ROLE_COUNT" != "1" ]; then
+  echo "Błąd: rola Administrator nie została przypisana użytkownikowi admin."
+  exit 1
+fi
+
+echo
+echo "Gotowe."
+echo "Baza danych:          $DB_NAME"
+echo "Użytkownik DB:        $DB_USER@$DB_HOST"
+echo "Użytkownik aplikacji: $APP_ADMIN_USER"
+echo "Hasło aplikacji:      $APP_ADMIN_PASS"
+echo
+echo "Weryfikacja:"
+mysql -h "$DB_HOST" -u "$ADMIN_USER" "-p$ADMIN_PASS" "$DB_NAME" -e "
+SELECT id, username, email, is_active FROM users WHERE username = '$APP_ADMIN_USER';
+SELECT u.username, r.name AS role_name
+FROM user_roles ur
+JOIN users u ON u.id = ur.user_id
+JOIN roles r ON r.id = ur.role_id
+WHERE u.username = '$APP_ADMIN_USER';
+"
