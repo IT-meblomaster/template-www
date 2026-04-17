@@ -100,10 +100,10 @@ function render_menu_tree(array $items, string $currentPage, int $level = 0): vo
 </head>
 <body>
 <div class="page">
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4 template-navbar">
-        <div class="container-fluid template-navbar-container">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4 app-navbar">
+        <div class="container-fluid">
             <a class="navbar-brand" href="index.php">
-                <img src="<?= e(($config['app']['base_url'] ?? '') . '/assets/img/logo.png') ?>" alt="Logo" class="template-logo">
+                <img src="<?= e(($config['app']['base_url'] ?? '') . '/assets/img/logo.png') ?>" alt="Logo" class="app-navbar-logo">
             </a>
 
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainMenu2" aria-controls="mainMenu2" aria-expanded="false" aria-label="Toggle navigation">
