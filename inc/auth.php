@@ -96,14 +96,10 @@ function login_user(PDO $pdo, string $username, string $password): bool
 function logout(): void
 {
     if (session_status() !== PHP_SESSION_ACTIVE) {
-        session_start();
+        return;
     }
 
     $_SESSION = [];
-
-    if (session_id() !== '') {
-        session_regenerate_id(true);
-    }
 
     if (ini_get('session.use_cookies')) {
         $params = session_get_cookie_params();
