@@ -64,11 +64,13 @@ function render_menu_tree(array $items, string $currentPage, int $level = 0): vo
             ?>
             <li class="dropdown-submenu">
                 <button
-                    class="dropdown-item dropdown-toggle btn btn-link text-start <?= $isActive ? 'active' : '' ?>"
+                    class="dropdown-item submenu-toggle d-flex align-items-center justify-content-between <?= $isActive ? 'active' : '' ?>"
                     type="button"
-                    onclick="return false;"
+                    data-submenu-toggle="true"
+                    aria-expanded="false"
                 >
-                    <?= e($title) ?>
+                    <span><?= e($title) ?></span>
+                    <span class="submenu-caret">›</span>
                 </button>
                 <ul class="dropdown-menu">
                     <?php render_menu_tree($children, $currentPage, $level + 1); ?>
@@ -97,66 +99,126 @@ function render_menu_tree(array $items, string $currentPage, int $level = 0): vo
     <link href="<?= e(($config['app']['base_url'] ?? '') . '/assets/css/style.css') ?>" rel="stylesheet">
 </head>
 <body>
+<div class="page">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4 template-navbar">
+        <div class="container-fluid template-navbar-container">
+            <a class="navbar-brand" href="index.php">
+                <img src="<?= e(($config['app']['base_url'] ?? '') . '/assets/img/logo.png') ?>" alt="Logo" class="template-logo">
+            </a>
 
-<nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4 template-navbar">
-    <div class="container-fluid">
-        <a class="navbar-brand" href="index.php">
-            <img src="<?= e(($config['app']['base_url'] ?? '') . '/assets/img/logo.png') ?>" alt="Logo" class="template-logo">
-        </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainMenu2" aria-controls="mainMenu2" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
 
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainMenu2" aria-controls="mainMenu2" aria-expanded="false" aria-label="Toggle navigation">
-            <span class="navbar-toggler-icon"></span>
-        </button>
-
-        <div class="collapse navbar-collapse" id="mainMenu2">
-            <?php if (is_logged_in()): ?>
-                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-                    <?php render_menu_tree($menuTree, $currentPage); ?>
-                </ul>
-            <?php endif; ?>
-
-            <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
+            <div class="collapse navbar-collapse" id="mainMenu2">
                 <?php if (is_logged_in()): ?>
-                    <?php $currentUser = current_user($pdo); ?>
-                    <li class="nav-item dropdown">
-                        <button
-                            class="nav-link dropdown-toggle btn btn-link"
-                            type="button"
-                            data-bs-toggle="dropdown"
-                            aria-expanded="false"
-                        >
-                            <?= e($currentUser['username'] ?? 'Użytkownik') ?>
-                        </button>
-
-                        <ul class="dropdown-menu dropdown-menu-end">
-                            <li>
-                                <form method="post" action="index.php?page=logout" class="m-0">
-                                    <?= csrf_input() ?>
-                                    <button type="submit" class="dropdown-item">
-                                        Wyloguj
-                                    </button>
-                                </form>
-                            </li>
-                        </ul>
-                    </li>
-                <?php else: ?>
-                    <li class="nav-item">
-                        <a class="nav-link" href="index.php?page=login">Zaloguj</a>
-                    </li>
+                    <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                        <?php render_menu_tree($menuTree, $currentPage); ?>
+                    </ul>
                 <?php endif; ?>
-            </ul>
-        </div>
-    </div>
-</nav>
 
-<main class="container py-2">
-    <?php foreach ($flashMessages as $flash): ?>
-        <?php
-        $type = $flash['type'] ?? 'info';
-        $message = $flash['message'] ?? '';
-        ?>
-        <div class="alert alert-<?= e($type) ?> alert-dismissible fade show" role="alert">
-            <?= e($message) ?>
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
+                    <?php if (is_logged_in()): ?>
+                        <?php $currentUser = current_user($pdo); ?>
+                        <li class="nav-item dropdown">
+                            <button
+                                class="nav-link dropdown-toggle btn btn-link"
+                                type="button"
+                                data-bs-toggle="dropdown"
+                                aria-expanded="false"
+                            >
+                                <?= e($currentUser['username'] ?? 'Użytkownik') ?>
+                            </button>
+
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li>
+                                    <form method="post" action="index.php?page=logout" class="m-0">
+                                        <?= csrf_input() ?>
+                                        <button type="submit" class="dropdown-item">
+                                            Wyloguj
+                                        </button>
+                                    </form>
+                                </li>
+                            </ul>
+                        </li>
+                    <?php else: ?>
+                        <li class="nav-item">
+                            <a class="nav-link" href="index.php?page=login">Zaloguj</a>
+                        </li>
+                    <?php endif; ?>
+                </ul>
+            </div>
         </div>
-    <?php endforeach; ?>
+    </nav>
+
+    <main class="container py-2 page-content">
+        <?php foreach ($flashMessages as $flash): ?>
+            <?php
+            $type = $flash['type'] ?? 'info';
+            $message = $flash['message'] ?? '';
+            ?>
+            <div class="alert alert-<?= e($type) ?> alert-dismissible fade show" role="alert">
+                <?= e($message) ?>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        <?php endforeach; ?>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('[data-submenu-toggle="true"]').forEach(function (button) {
+        button.addEventListener('click', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+
+            var parentLi = button.closest('.dropdown-submenu');
+            if (!parentLi) {
+                return;
+            }
+
+            var submenu = parentLi.querySelector(':scope > .dropdown-menu');
+            if (!submenu) {
+                return;
+            }
+
+            var parentMenu = parentLi.parentElement;
+            if (parentMenu) {
+                parentMenu.querySelectorAll(':scope > .dropdown-submenu > .dropdown-menu.show').forEach(function (openMenu) {
+                    if (openMenu !== submenu) {
+                        openMenu.classList.remove('show');
+                        var openToggle = openMenu.parentElement.querySelector(':scope > [data-submenu-toggle="true"]');
+                        if (openToggle) {
+                            openToggle.setAttribute('aria-expanded', 'false');
+                        }
+                    }
+                });
+            }
+
+            var isOpen = submenu.classList.contains('show');
+            submenu.classList.toggle('show', !isOpen);
+            button.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
+        });
+    });
+
+    document.querySelectorAll('.dropdown').forEach(function (dropdownEl) {
+        dropdownEl.addEventListener('hidden.bs.dropdown', function () {
+            dropdownEl.querySelectorAll('.dropdown-menu.show').forEach(function (menu) {
+                menu.classList.remove('show');
+            });
+
+            dropdownEl.querySelectorAll('[data-submenu-toggle="true"]').forEach(function (toggle) {
+                toggle.setAttribute('aria-expanded', 'false');
+            });
+        });
+    });
+
+    document.addEventListener('click', function () {
+        document.querySelectorAll('.dropdown-submenu > .dropdown-menu.show').forEach(function (menu) {
+            menu.classList.remove('show');
+        });
+
+        document.querySelectorAll('[data-submenu-toggle="true"]').forEach(function (toggle) {
+            toggle.setAttribute('aria-expanded', 'false');
+        });
+    });
+});
+</script>
