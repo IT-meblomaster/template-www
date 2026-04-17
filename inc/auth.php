@@ -47,12 +47,7 @@ function current_user(PDO $pdo): ?array
     $stmt->execute([':id' => $userId]);
     $user = $stmt->fetch();
 
-    if (!$user) {
-        unset($_SESSION['user_id']);
-        return null;
-    }
-
-    return $user;
+    return $user ?: null;
 }
 
 function login(PDO $pdo, string $username, string $password): bool
@@ -74,12 +69,7 @@ function login(PDO $pdo, string $username, string $password): bool
         return false;
     }
 
-    if (session_status() !== PHP_SESSION_ACTIVE) {
-        session_start();
-    }
-
     session_regenerate_id(true);
-    $_SESSION = [];
     $_SESSION['user_id'] = (int) $user['id'];
 
     $update = $pdo->prepare('UPDATE users SET last_login_at = NOW() WHERE id = :id');
@@ -95,33 +85,24 @@ function login_user(PDO $pdo, string $username, string $password): bool
 
 function logout(): void
 {
-    if (session_status() !== PHP_SESSION_ACTIVE) {
-        session_start();
-    }
-
     $_SESSION = [];
-
-    if (session_id() !== '') {
-        session_regenerate_id(true);
-    }
 
     if (ini_get('session.use_cookies')) {
         $params = session_get_cookie_params();
         setcookie(
             session_name(),
             '',
-            [
-                'expires' => time() - 42000,
-                'path' => $params['path'] ?? '/',
-                'domain' => $params['domain'] ?? '',
-                'secure' => (bool) ($params['secure'] ?? false),
-                'httponly' => (bool) ($params['httponly'] ?? true),
-                'samesite' => $params['samesite'] ?? 'Lax',
-            ]
+            time() - 42000,
+            $params['path'] ?? '/',
+            $params['domain'] ?? '',
+            (bool) ($params['secure'] ?? false),
+            (bool) ($params['httponly'] ?? true)
         );
     }
 
-    session_destroy();
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_destroy();
+    }
 }
 
 function logout_user(): void
