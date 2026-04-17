@@ -1,4 +1,4 @@
-# template-www
+# template-www v1.0
 
 Szablonowy serwis WWW w PHP oparty o:
 - PHP
