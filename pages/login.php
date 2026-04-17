@@ -1,4 +1,6 @@
 <?php
+declare(strict_types=1);
+
 if (is_logged_in()) {
     redirect('index.php?page=dashboard');
 }
@@ -18,6 +20,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (login($pdo, $username, $password)) {
+        regenerate_csrf_token();
         set_flash('success', 'Zalogowano poprawnie.');
         redirect('index.php?page=dashboard');
     }
@@ -31,16 +34,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="card shadow-sm">
             <div class="card-header"><strong>Logowanie</strong></div>
             <div class="card-body">
-                <form method="post" action="index.php?page=login">
+                <form method="post" action="index.php?page=login" autocomplete="off">
                     <?= csrf_input() ?>
+
                     <div class="mb-3">
                         <label for="username" class="form-label">Login</label>
-                        <input type="text" class="form-control" id="username" name="username" required>
+                        <input type="text" class="form-control" id="username" name="username" required autofocus>
                     </div>
+
                     <div class="mb-3">
                         <label for="password" class="form-label">Hasło</label>
                         <input type="password" class="form-control" id="password" name="password" required>
                     </div>
+
                     <button type="submit" class="btn btn-primary w-100">Zaloguj</button>
                 </form>
             </div>
