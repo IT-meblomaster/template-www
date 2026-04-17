@@ -9,23 +9,6 @@ if (!has_permission($pdo, 'roles.view') && !has_permission($pdo, 'roles.manage')
 
 $errors = [];
 $editingRoleId = isset($_GET['edit']) ? (int) $_GET['edit'] : 0;
-$openModal = false;
-$modalTitle = 'Dodaj rolę';
-
-$roleToEdit = [
-    'id' => 0,
-    'name' => '',
-    'description' => '',
-];
-$rolePermissionIds = [];
-
-$permissions = $pdo->query("
-    SELECT id, name, description
-    FROM permissions
-    ORDER BY name
-")->fetchAll();
-
-$protectedRoleNames = ['Administrator'];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!has_permission($pdo, 'roles.manage')) {
@@ -36,29 +19,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     verify_csrf();
 
-    $action = $_POST['action'] ?? '';
+    $action = (string) ($_POST['action'] ?? '');
 
     if ($action === 'save_role') {
         $roleId = (int) ($_POST['role_id'] ?? 0);
         $name = trim((string) ($_POST['name'] ?? ''));
         $description = trim((string) ($_POST['description'] ?? ''));
         $permissionIds = array_values(array_unique(array_map('intval', $_POST['permissions'] ?? [])));
-
-        $roleToEdit = [
-            'id' => $roleId,
-            'name' => $name,
-            'description' => $description,
-        ];
-        $rolePermissionIds = $permissionIds;
-        $modalTitle = $roleId > 0 ? 'Edytuj rolę' : 'Dodaj rolę';
-        $openModal = true;
-
-        $originalRole = null;
-        if ($roleId > 0) {
-            $stmt = $pdo->prepare('SELECT * FROM roles WHERE id = :id LIMIT 1');
-            $stmt->execute(['id' => $roleId]);
-            $originalRole = $stmt->fetch();
-        }
 
         if ($name === '') {
             $errors[] = 'Nazwa roli jest wymagana.';
@@ -69,43 +36,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'name' => $name,
             'id' => $roleId,
         ]);
+
         if ($stmt->fetch()) {
             $errors[] = 'Rola o takiej nazwie już istnieje.';
-        }
-
-        if ($originalRole && in_array((string) $originalRole['name'], $protectedRoleNames, true) && $name !== $originalRole['name']) {
-            $errors[] = 'Nie można zmienić nazwy roli systemowej.';
-        }
-
-        $validPermissionIds = array_map('intval', array_column($permissions, 'id'));
-        foreach ($permissionIds as $permissionId) {
-            if (!in_array($permissionId, $validPermissionIds, true)) {
-                $errors[] = 'Wybrano nieprawidłowe uprawnienie.';
-                break;
-            }
-        }
-
-        if ($originalRole && (string) $originalRole['name'] === 'Administrator') {
-            $adminUsersCount = count_users_with_role($pdo, 'Administrator');
-
-            if ($adminUsersCount > 0 && $permissionIds === []) {
-                $errors[] = 'Nie można usunąć wszystkich uprawnień z roli Administrator, gdy jest przypisana do użytkowników.';
-            }
-
-            $requiredAdminPermissions = ['users.manage', 'roles.manage', 'permissions.manage'];
-            foreach ($requiredAdminPermissions as $requiredPermission) {
-                $requiredPermissionId = null;
-                foreach ($permissions as $permission) {
-                    if ((string) $permission['name'] === $requiredPermission) {
-                        $requiredPermissionId = (int) $permission['id'];
-                        break;
-                    }
-                }
-
-                if ($requiredPermissionId !== null && !in_array($requiredPermissionId, $permissionIds, true)) {
-                    $errors[] = 'Rola Administrator musi zachować kluczowe uprawnienie: ' . $requiredPermission . '.';
-                }
-            }
         }
 
         if (!$errors) {
@@ -115,12 +48,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($roleId > 0) {
                     $stmt = $pdo->prepare('
                         UPDATE roles
-                        SET name = :name, description = :description
+                        SET name = :name,
+                            description = :description
                         WHERE id = :id
                     ');
                     $stmt->execute([
                         'name' => $name,
-                        'description' => $description !== '' ? $description : null,
+                        'description' => $description,
                         'id' => $roleId,
                     ]);
                 } else {
@@ -130,7 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ');
                     $stmt->execute([
                         'name' => $name,
-                        'description' => $description !== '' ? $description : null,
+                        'description' => $description,
                     ]);
                     $roleId = (int) $pdo->lastInsertId();
                 }
@@ -138,11 +72,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $pdo->prepare('DELETE FROM role_permissions WHERE role_id = :role_id')
                     ->execute(['role_id' => $roleId]);
 
-                if ($permissionIds) {
+                if ($permissionIds !== []) {
                     $stmt = $pdo->prepare('
                         INSERT INTO role_permissions (role_id, permission_id)
                         VALUES (:role_id, :permission_id)
                     ');
+
                     foreach ($permissionIds as $permissionId) {
                         $stmt->execute([
                             'role_id' => $roleId,
@@ -153,14 +88,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $pdo->commit();
                 set_flash('success', 'Rola została zapisana.');
-                redirect('index.php?page=roles');
+                ?>
+                <script>
+                window.location.replace('index.php?page=roles');
+                </script>
+                <noscript>
+                    <meta http-equiv="refresh" content="0;url=index.php?page=roles">
+                </noscript>
+                <?php
+                return;
             } catch (Throwable $e) {
-                $pdo->rollBack();
+                if ($pdo->inTransaction()) {
+                    $pdo->rollBack();
+                }
                 $errors[] = 'Nie udało się zapisać roli.';
             }
         }
     }
 }
+
+$roleToEdit = [
+    'id' => 0,
+    'name' => '',
+    'description' => '',
+];
+
+$rolePermissionIds = [];
+$modalTitle = 'Dodaj nową rolę';
+$openModal = false;
 
 if ($editingRoleId > 0) {
     $stmt = $pdo->prepare('SELECT * FROM roles WHERE id = :id LIMIT 1');
@@ -169,13 +124,24 @@ if ($editingRoleId > 0) {
 
     if ($found) {
         $roleToEdit = $found;
-        $modalTitle = 'Edytuj rolę: ' . ($roleToEdit['name'] ?: ('#' . $editingRoleId));
+        $modalTitle = 'Edytuj rolę: ' . ($roleToEdit['name'] ?: ('#' . $roleToEdit['id']));
         $openModal = true;
 
         $stmt = $pdo->prepare('SELECT permission_id FROM role_permissions WHERE role_id = :role_id');
         $stmt->execute(['role_id' => $editingRoleId]);
         $rolePermissionIds = array_map('intval', array_column($stmt->fetchAll(), 'permission_id'));
     }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $errors) {
+    $roleToEdit = [
+        'id' => (int) ($_POST['role_id'] ?? 0),
+        'name' => trim((string) ($_POST['name'] ?? '')),
+        'description' => trim((string) ($_POST['description'] ?? '')),
+    ];
+    $rolePermissionIds = array_map('intval', $_POST['permissions'] ?? []);
+    $modalTitle = $roleToEdit['id'] > 0 ? 'Edytuj rolę' : 'Dodaj nową rolę';
+    $openModal = true;
 }
 
 $roles = $pdo->query("
@@ -189,43 +155,51 @@ $roles = $pdo->query("
     LEFT JOIN user_roles ur ON ur.role_id = r.id
     LEFT JOIN role_permissions rp ON rp.role_id = r.id
     LEFT JOIN permissions p ON p.id = rp.permission_id
-    GROUP BY r.id, r.name, r.description
-    ORDER BY r.name
+    GROUP BY
+        r.id,
+        r.name,
+        r.description
+    ORDER BY
+        r.name
+")->fetchAll();
+
+$permissions = $pdo->query("
+    SELECT id, name, description
+    FROM permissions
+    ORDER BY name
 ")->fetchAll();
 ?>
 
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="d-flex justify-content-between align-items-center mb-3">
     <h1 class="h3 mb-0">Role</h1>
 </div>
 
 <div class="card shadow-sm">
     <div class="card-body">
         <?php if (!$roles): ?>
-            <p class="mb-0">Brak ról.</p>
+            <p class="mb-0">Brak zdefiniowanych ról.</p>
         <?php else: ?>
             <div class="table-responsive">
-                <table class="table table-striped table-hover align-middle">
+                <table class="table table-striped table-hover align-middle roles-table">
                     <thead>
                     <tr>
-                        <th>ID</th>
                         <th>Nazwa</th>
                         <th>Opis</th>
                         <th>Użytkownicy</th>
-                        <th>Uprawnienia</th>
-                        <th class="text-end">Akcje</th>
+                        <th class="roles-permissions-col">Uprawnienia</th>
+                        <th class="text-end roles-actions-col">Akcje</th>
                     </tr>
                     </thead>
                     <tbody>
-                    <?php foreach ($roles as $role): ?>
+                    <?php foreach ($roles as $roleRow): ?>
                         <tr>
-                            <td><?= (int) $role['id'] ?></td>
-                            <td><?= e($role['name']) ?></td>
-                            <td><?= e($role['description'] ?: '-') ?></td>
-                            <td><?= (int) $role['users_count'] ?></td>
-                            <td><?= e($role['permissions_list'] ?: '-') ?></td>
-                            <td class="text-end">
+                            <td><?= e($roleRow['name']) ?></td>
+                            <td><?= e($roleRow['description'] ?: '-') ?></td>
+                            <td><?= (int) $roleRow['users_count'] ?></td>
+                            <td class="roles-permissions-col"><?= e($roleRow['permissions_list'] ?: '-') ?></td>
+                            <td class="text-end roles-actions-col">
                                 <?php if (has_permission($pdo, 'roles.manage')): ?>
-                                    <a href="index.php?page=roles&edit=<?= (int) $role['id'] ?>" class="btn btn-sm btn-outline-primary">
+                                    <a href="index.php?page=roles&edit=<?= (int) $roleRow['id'] ?>" class="btn btn-sm btn-outline-primary">
                                         Edytuj
                                     </a>
                                 <?php endif; ?>
@@ -254,9 +228,9 @@ $roles = $pdo->query("
 
 <?php if (has_permission($pdo, 'roles.manage')): ?>
     <div class="modal fade" id="roleModal" tabindex="-1" aria-labelledby="roleModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg modal-dialog-scrollable">
-            <div class="modal-content">
-                <form method="post">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable permissions-modal-dialog">
+            <div class="modal-content permissions-modal-content">
+                <form method="post" class="permissions-modal-form">
                     <?= csrf_input() ?>
                     <input type="hidden" name="action" value="save_role">
                     <input type="hidden" name="role_id" value="<?= (int) $roleToEdit['id'] ?>">
@@ -266,7 +240,7 @@ $roles = $pdo->query("
                         <a href="index.php?page=roles" class="btn-close"></a>
                     </div>
 
-                    <div class="modal-body">
+                    <div class="modal-body permissions-modal-body">
                         <?php if ($errors): ?>
                             <div class="alert alert-danger">
                                 <ul class="mb-0">
@@ -277,39 +251,41 @@ $roles = $pdo->query("
                             </div>
                         <?php endif; ?>
 
-                        <div class="mb-3">
-                            <label class="form-label">Nazwa roli</label>
-                            <input type="text" name="name" class="form-control" value="<?= e($roleToEdit['name']) ?>" required>
-                        </div>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Nazwa</label>
+                                <input type="text" name="name" class="form-control" value="<?= e($roleToEdit['name']) ?>" required>
+                            </div>
 
-                        <div class="mb-3">
-                            <label class="form-label">Opis</label>
-                            <textarea name="description" class="form-control" rows="3"><?= e($roleToEdit['description']) ?></textarea>
-                        </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Opis</label>
+                                <input type="text" name="description" class="form-control" value="<?= e($roleToEdit['description']) ?>">
+                            </div>
 
-                        <div class="mb-3">
-                            <label class="form-label">Uprawnienia</label>
-                            <div class="border rounded p-3" style="max-height: 300px; overflow:auto;">
-                                <?php foreach ($permissions as $permission): ?>
-                                    <div class="form-check">
-                                        <input
-                                            class="form-check-input"
-                                            type="checkbox"
-                                            name="permissions[]"
-                                            value="<?= (int) $permission['id'] ?>"
-                                            id="perm_<?= (int) $permission['id'] ?>"
-                                            <?= in_array((int) $permission['id'], $rolePermissionIds, true) ? 'checked' : '' ?>
-                                        >
-                                        <label class="form-check-label" for="perm_<?= (int) $permission['id'] ?>">
-                                            <?= e($permission['name']) ?>
-                                        </label>
-                                    </div>
-                                <?php endforeach; ?>
+                            <div class="col-12">
+                                <label class="form-label">Uprawnienia</label>
+                                <div class="border rounded p-3 permissions-list-box">
+                                    <?php foreach ($permissions as $permission): ?>
+                                        <div class="form-check">
+                                            <input
+                                                class="form-check-input"
+                                                type="checkbox"
+                                                name="permissions[]"
+                                                value="<?= (int) $permission['id'] ?>"
+                                                id="role_perm_<?= (int) $permission['id'] ?>"
+                                                <?= in_array((int) $permission['id'], $rolePermissionIds, true) ? 'checked' : '' ?>
+                                            >
+                                            <label class="form-check-label" for="role_perm_<?= (int) $permission['id'] ?>">
+                                                <?= e($permission['name']) ?>
+                                            </label>
+                                        </div>
+                                    <?php endforeach; ?>
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    <div class="modal-footer">
+                    <div class="modal-footer permissions-modal-footer">
                         <a href="index.php?page=roles" class="btn btn-outline-secondary">Anuluj</a>
                         <button type="submit" class="btn btn-primary">Zapisz rolę</button>
                     </div>

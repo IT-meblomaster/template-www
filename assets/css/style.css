@@ -158,6 +158,22 @@ table {
     font-size: 0.9rem;
 }
 
+.roles-table td:nth-child(4),
+.roles-table th:nth-child(4) {
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    min-width: 320px;
+}
+
+.roles-permissions-col {
+    min-width: 360px;
+}
+
+.roles-actions-col {
+    min-width: 120px;
+}
+
 .table-responsive table td,
 .table-responsive table th {
     vertical-align: middle;
