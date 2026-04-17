@@ -132,12 +132,9 @@ function render_menu_tree(array $items, string $currentPage, int $level = 0): vo
 
                             <ul class="dropdown-menu dropdown-menu-end">
                                 <li>
-                                    <form method="post" action="index.php?page=logout" class="m-0">
-                                        <?= csrf_input() ?>
-                                        <button type="submit" class="dropdown-item">
-                                            Wyloguj
-                                        </button>
-                                    </form>
+                                    <a class="dropdown-item" href="index.php?page=logout">
+                                        Wyloguj
+                                    </a>
                                 </li>
                             </ul>
                         </li>
