@@ -123,7 +123,8 @@ table {
 .roles-table,
 .permissions-table,
 .access-table,
-.admin-table {
+.admin-table,
+.menu-manager-table {
     table-layout: auto;
 }
 
@@ -138,7 +139,9 @@ table {
 .access-table td,
 .access-table th,
 .admin-table td,
-.admin-table th {
+.admin-table th,
+.menu-manager-table td,
+.menu-manager-table th {
     white-space: normal;
     word-break: break-word;
     overflow-wrap: anywhere;
@@ -147,10 +150,10 @@ table {
 
 .users-table td:nth-child(2),
 .pages-table td:nth-child(2),
-.permissions-table td:nth-child(9),
-.access-table td:nth-child(9),
+.permissions-table td:nth-child(8),
+.access-table td:nth-child(8),
 .admin-table td:nth-child(2),
-.admin-table td:nth-child(9) {
+.admin-table td:nth-child(8) {
     max-width: 280px;
     font-size: 0.9rem;
 }
@@ -164,8 +167,8 @@ table {
 .table-responsive .table th:nth-child(3),
 .table-responsive .table td:nth-child(6),
 .table-responsive .table th:nth-child(6),
-.table-responsive .table td:nth-child(9),
-.table-responsive .table th:nth-child(9) {
+.table-responsive .table td:nth-child(8),
+.table-responsive .table th:nth-child(8) {
     white-space: normal;
     word-break: break-word;
     overflow-wrap: anywhere;
@@ -200,6 +203,53 @@ table {
 .permissions-list-box {
     max-height: 300px;
     overflow: auto;
+}
+
+.menu-item-label {
+    display: inline-block;
+    padding: 0.35rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1.2;
+}
+
+.menu-item-label-page {
+    background-color: #d1e7dd;
+    color: #0f5132;
+}
+
+.menu-item-label-container {
+    background-color: #cff4fc;
+    color: #055160;
+}
+
+.menu-item-label-external {
+    background-color: #f8d7da;
+    color: #842029;
+}
+
+.menu-manager-legend {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.menu-manager-col-target {
+    min-width: 110px;
+}
+
+.menu-manager-col-visible {
+    min-width: 110px;
+}
+
+.menu-manager-col-sort {
+    min-width: 90px;
+}
+
+.menu-manager-col-actions {
+    min-width: 190px;
 }
 
 @media (max-width: 991.98px) {

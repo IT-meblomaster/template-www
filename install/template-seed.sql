@@ -11,7 +11,7 @@ VALUES
         1,
         'admin',
         'admin@example.com',
-        '$2y$10$wQ1Q0Y6M2H1q9m3Q3v3m7eJm2MZVgqj7O4k0C0gE6WQxUQ6q7f8Q2',
+        '$2y$10$ElLH9cXnQ3OYo2r.ele78epDByBGMo2kxExciZiR41Zv0XF3pTH5K',
         'System',
         'Administrator',
         1

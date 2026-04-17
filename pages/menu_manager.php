@@ -87,7 +87,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pageId = (int) ($_POST['page_id'] ?? 0);
         $url = trim((string) ($_POST['url'] ?? ''));
         $parentId = (int) ($_POST['parent_id'] ?? 0);
-        $menuGroup = trim((string) ($_POST['menu_group'] ?? 'main'));
         $target = (string) ($_POST['target'] ?? '_self');
         $sortOrder = (int) ($_POST['sort_order'] ?? 100);
         $isVisible = isset($_POST['is_visible']) ? 1 : 0;
@@ -113,10 +112,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if (!in_array($target, ['_self', '_blank'], true)) {
             $errors[] = 'Nieprawidłowy target linku.';
-        }
-
-        if ($menuGroup === '') {
-            $errors[] = 'Grupa menu jest wymagana.';
         }
 
         if ($type === 'page') {
@@ -167,7 +162,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             page_id = :page_id,
                             label = :label,
                             url = :url,
-                            menu_group = :menu_group,
                             target = :target,
                             sort_order = :sort_order,
                             is_visible = :is_visible
@@ -178,7 +172,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'page_id' => $pageId > 0 ? $pageId : null,
                         'label' => $label,
                         'url' => $pageId > 0 ? null : $url,
-                        'menu_group' => $menuGroup,
                         'target' => $target,
                         'sort_order' => $sortOrder,
                         'is_visible' => $isVisible,
@@ -194,7 +187,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'page_id' => $pageId > 0 ? $pageId : null,
                         'label' => $label,
                         'url' => $pageId > 0 ? null : $url,
-                        'menu_group' => $menuGroup,
+                        'menu_group' => 'main',
                         'target' => $target,
                         'sort_order' => $sortOrder,
                         'is_visible' => $isVisible,
@@ -238,6 +231,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
     }
+
+    if ($action === 'delete_menu_item') {
+        $menuId = (int) ($_POST['menu_id'] ?? 0);
+
+        $stmt = $pdo->prepare('SELECT id, is_system FROM menu_items WHERE id = :id LIMIT 1');
+        $stmt->execute(['id' => $menuId]);
+        $item = $stmt->fetch();
+
+        if (!$item) {
+            $errors[] = 'Nie znaleziono pozycji menu do usunięcia.';
+        } elseif ((int) $item['is_system'] === 1) {
+            $errors[] = 'Nie można usunąć systemowej pozycji menu.';
+        } else {
+            try {
+                $stmt = $pdo->prepare('DELETE FROM menu_items WHERE id = :id');
+                $stmt->execute(['id' => $menuId]);
+
+                set_flash('success', 'Pozycja menu została usunięta.');
+                ?>
+                <script>
+                window.location.replace('index.php?page=menu_manager');
+                </script>
+                <noscript>
+                    <meta http-equiv="refresh" content="0;url=index.php?page=menu_manager">
+                </noscript>
+                <?php
+                return;
+            } catch (Throwable $e) {
+                $errors[] = 'Nie udało się usunąć pozycji menu.';
+            }
+        }
+    }
 }
 
 $menuToEdit = [
@@ -265,7 +290,9 @@ if ($editingMenuId > 0) {
 
     if ($found) {
         $menuToEdit = $found;
-        $itemType = $menuToEdit['page_id'] ? 'page' : (((string) $menuToEdit['url'] !== '' && str_starts_with((string) $menuToEdit['url'], 'internal:container:')) ? 'container' : 'external');
+        $itemType = $menuToEdit['page_id']
+            ? 'page'
+            : (((string) $menuToEdit['url'] !== '' && str_starts_with((string) $menuToEdit['url'], 'internal:container:')) ? 'container' : 'external');
         $modalTitle = 'Edytuj pozycję menu: ' . ($menuToEdit['label'] ?: ('#' . $menuToEdit['id']));
         $openModal = true;
 
@@ -282,7 +309,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $errors) {
         'page_id' => ((int) ($_POST['page_id'] ?? 0)) ?: null,
         'label' => trim((string) ($_POST['label'] ?? '')),
         'url' => trim((string) ($_POST['url'] ?? '')),
-        'menu_group' => trim((string) ($_POST['menu_group'] ?? 'main')),
+        'menu_group' => 'main',
         'target' => (string) ($_POST['target'] ?? '_self'),
         'sort_order' => (int) ($_POST['sort_order'] ?? 100),
         'is_visible' => isset($_POST['is_visible']) ? 1 : 0,
@@ -343,7 +370,7 @@ $menuItems = $pdo->query("
 ?>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
-    <h1 class="h3 mb-0">Menu</h1>
+    <h1 class="h3 mb-0">Menedżer menu</h1>
 </div>
 
 <div class="card shadow-sm">
@@ -352,58 +379,77 @@ $menuItems = $pdo->query("
             <p class="mb-0">Brak zdefiniowanych pozycji menu.</p>
         <?php else: ?>
             <div class="table-responsive">
-                <table class="table table-striped table-hover align-middle permissions-table">
+                <table class="table table-striped table-hover align-middle permissions-table menu-manager-table">
                     <thead>
                     <tr>
-                        <th>ID</th>
                         <th>Etykieta</th>
-                        <th>Typ</th>
                         <th>Strona / URL</th>
                         <th>Rodzic</th>
-                        <th>Grupa</th>
-                        <th>Target</th>
-                        <th>Widoczna</th>
-                        <th>Sort</th>
+                        <th class="menu-manager-col-target">Target</th>
+                        <th class="menu-manager-col-visible">Widoczna</th>
+                        <th class="menu-manager-col-sort">Sort</th>
                         <th>Uprawnienia</th>
-                        <th class="text-end">Akcje</th>
+                        <th class="text-end menu-manager-col-actions">Akcje</th>
                     </tr>
                     </thead>
                     <tbody>
                     <?php foreach ($menuItems as $row): ?>
                         <?php
                         $rowType = $row['page_id']
-                            ? 'Strona'
-                            : (str_starts_with((string) $row['url'], 'internal:container:') ? 'Kontener' : 'Link');
+                            ? 'page'
+                            : (str_starts_with((string) $row['url'], 'internal:container:') ? 'container' : 'external');
                         $rowDestination = $row['page_slug'] ? ('page=' . $row['page_slug']) : (string) $row['url'];
+                        $badgeClass = match ($rowType) {
+                            'page' => 'menu-item-label-page',
+                            'container' => 'menu-item-label-container',
+                            default => 'menu-item-label-external',
+                        };
                         ?>
                         <tr>
-                            <td><?= (int) $row['id'] ?></td>
-                            <td><?= e($row['label']) ?></td>
-                            <td><?= e($rowType) ?></td>
+                            <td>
+                                <span class="menu-item-label <?= e($badgeClass) ?>">
+                                    <?= e($row['label']) ?>
+                                </span>
+                            </td>
                             <td><?= e($rowDestination) ?></td>
                             <td><?= e($row['parent_label'] ?: '-') ?></td>
-                            <td><?= e($row['menu_group']) ?></td>
-                            <td><?= e($row['target']) ?></td>
-                            <td>
+                            <td class="menu-manager-col-target"><?= e($row['target']) ?></td>
+                            <td class="menu-manager-col-visible">
                                 <?php if ((int) $row['is_visible'] === 1): ?>
                                     <span class="badge text-bg-success">Tak</span>
                                 <?php else: ?>
                                     <span class="badge text-bg-secondary">Nie</span>
                                 <?php endif; ?>
                             </td>
-                            <td><?= (int) $row['sort_order'] ?></td>
+                            <td class="menu-manager-col-sort"><?= (int) $row['sort_order'] ?></td>
                             <td><?= e($row['permissions_list'] ?: '-') ?></td>
-                            <td class="text-end">
+                            <td class="text-end menu-manager-col-actions">
                                 <?php if (has_permission($pdo, 'menu.manage')): ?>
-                                    <a href="index.php?page=menu_manager&edit=<?= (int) $row['id'] ?>" class="btn btn-sm btn-outline-primary">
-                                        Edytuj
-                                    </a>
+                                    <div class="d-inline-flex gap-1">
+                                        <a href="index.php?page=menu_manager&edit=<?= (int) $row['id'] ?>" class="btn btn-sm btn-outline-primary">
+                                            Edytuj
+                                        </a>
+                                        <?php if ((int) $row['is_system'] !== 1): ?>
+                                            <form method="post" class="d-inline" onsubmit="return confirm('Usunąć tę pozycję menu?');">
+                                                <?= csrf_input() ?>
+                                                <input type="hidden" name="action" value="delete_menu_item">
+                                                <input type="hidden" name="menu_id" value="<?= (int) $row['id'] ?>">
+                                                <button type="submit" class="btn btn-sm btn-outline-danger">Usuń</button>
+                                            </form>
+                                        <?php endif; ?>
+                                    </div>
                                 <?php endif; ?>
                             </td>
                         </tr>
                     <?php endforeach; ?>
                     </tbody>
                 </table>
+            </div>
+
+            <div class="menu-manager-legend mt-3">
+                <span class="menu-item-label menu-item-label-page">Strona</span>
+                <span class="menu-item-label menu-item-label-container">Kontener</span>
+                <span class="menu-item-label menu-item-label-external">Link zewnętrzny</span>
             </div>
 
             <?php if (has_permission($pdo, 'menu.manage')): ?>
@@ -503,12 +549,7 @@ $menuItems = $pdo->query("
                                 </select>
                             </div>
 
-                            <div class="col-md-6">
-                                <label class="form-label">Grupa menu</label>
-                                <input type="text" name="menu_group" class="form-control" value="<?= e($menuToEdit['menu_group']) ?>" required>
-                            </div>
-
-                            <div class="col-md-4">
+                            <div class="col-md-3">
                                 <label class="form-label">Target</label>
                                 <select name="target" class="form-select">
                                     <option value="_self" <?= (string) $menuToEdit['target'] === '_self' ? 'selected' : '' ?>>_self</option>
@@ -516,12 +557,12 @@ $menuItems = $pdo->query("
                                 </select>
                             </div>
 
-                            <div class="col-md-4">
+                            <div class="col-md-3">
                                 <label class="form-label">Kolejność</label>
                                 <input type="number" name="sort_order" class="form-control" value="<?= (int) $menuToEdit['sort_order'] ?>">
                             </div>
 
-                            <div class="col-md-4">
+                            <div class="col-md-3">
                                 <div class="form-check mt-4">
                                     <input
                                         class="form-check-input"
