@@ -8,7 +8,9 @@ $menuTree = get_visible_menu_tree($pdo);
 function menu_contains_current(array $items, string $currentPage): bool
 {
     foreach ($items as $item) {
-        if (($item['slug'] ?? '') === $currentPage) {
+        $pageSlug = (string) ($item['page_slug'] ?? '');
+
+        if ($pageSlug === $currentPage) {
             return true;
         }
 
@@ -24,11 +26,13 @@ function menu_contains_current(array $items, string $currentPage): bool
 function render_menu_tree(array $items, string $currentPage, int $level = 0): void
 {
     foreach ($items as $item) {
-        $slug = (string) ($item['slug'] ?? '');
-        $title = (string) ($item['title'] ?? '');
+        $label = (string) ($item['label'] ?? '');
         $children = $item['children'] ?? [];
         $hasChildren = is_array($children) && $children !== [];
-        $isActive = $currentPage === $slug || ($hasChildren && menu_contains_current($children, $currentPage));
+        $pageSlug = (string) ($item['page_slug'] ?? '');
+        $href = menu_item_href($item);
+        $target = menu_item_target($item);
+        $isActive = ($pageSlug !== '' && $currentPage === $pageSlug) || ($hasChildren && menu_contains_current($children, $currentPage));
 
         if ($level === 0) {
             if ($hasChildren) {
@@ -40,7 +44,7 @@ function render_menu_tree(array $items, string $currentPage, int $level = 0): vo
                         data-bs-toggle="dropdown"
                         aria-expanded="false"
                     >
-                        <?= e($title) ?>
+                        <?= e($label) ?>
                     </button>
                     <ul class="dropdown-menu">
                         <?php render_menu_tree($children, $currentPage, 1); ?>
@@ -50,8 +54,13 @@ function render_menu_tree(array $items, string $currentPage, int $level = 0): vo
             } else {
                 ?>
                 <li class="nav-item">
-                    <a class="nav-link <?= $isActive ? 'active' : '' ?>" href="index.php?page=<?= e($slug) ?>">
-                        <?= e($title) ?>
+                    <a
+                        class="nav-link <?= $isActive ? 'active' : '' ?>"
+                        href="<?= e($href) ?>"
+                        target="<?= e($target) ?>"
+                        <?= $target === '_blank' ? 'rel="noopener noreferrer"' : '' ?>
+                    >
+                        <?= e($label) ?>
                     </a>
                 </li>
                 <?php
@@ -69,7 +78,7 @@ function render_menu_tree(array $items, string $currentPage, int $level = 0): vo
                     data-submenu-toggle="true"
                     aria-expanded="false"
                 >
-                    <span><?= e($title) ?></span>
+                    <span><?= e($label) ?></span>
                     <span class="submenu-caret">›</span>
                 </button>
                 <ul class="dropdown-menu">
@@ -80,8 +89,13 @@ function render_menu_tree(array $items, string $currentPage, int $level = 0): vo
         } else {
             ?>
             <li>
-                <a class="dropdown-item <?= $isActive ? 'active' : '' ?>" href="index.php?page=<?= e($slug) ?>">
-                    <?= e($title) ?>
+                <a
+                    class="dropdown-item <?= $isActive ? 'active' : '' ?>"
+                    href="<?= e($href) ?>"
+                    target="<?= e($target) ?>"
+                    <?= $target === '_blank' ? 'rel="noopener noreferrer"' : '' ?>
+                >
+                    <?= e($label) ?>
                 </a>
             </li>
             <?php

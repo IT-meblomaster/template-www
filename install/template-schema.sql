@@ -1,158 +1,142 @@
--- MySQL dump 10.19  Distrib 10.3.39-MariaDB, for Linux (x86_64)
---
--- Host: localhost    Database: template_www
--- ------------------------------------------------------
--- Server version	10.3.39-MariaDB
+-- =========================================================
+-- template-www schema
+-- Routing + ACL + menu separated
+-- =========================================================
 
-/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
-/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
-/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
-/*!40101 SET NAMES utf8mb4 */;
-/*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;
-/*!40103 SET TIME_ZONE='+00:00' */;
-/*!40014 SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0 */;
-/*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
-/*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
-/*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
+SET NAMES utf8mb4;
+SET FOREIGN_KEY_CHECKS = 0;
 
---
--- Table structure for table `page_permissions`
---
+DROP TABLE IF EXISTS role_permissions;
+DROP TABLE IF EXISTS user_roles;
+DROP TABLE IF EXISTS page_permissions;
+DROP TABLE IF EXISTS menu_item_permissions;
+DROP TABLE IF EXISTS menu_items;
+DROP TABLE IF EXISTS permissions;
+DROP TABLE IF EXISTS roles;
+DROP TABLE IF EXISTS users;
+DROP TABLE IF EXISTS pages;
 
-DROP TABLE IF EXISTS `page_permissions`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `page_permissions` (
-  `page_id` int(10) unsigned NOT NULL,
-  `permission_id` int(10) unsigned NOT NULL,
-  PRIMARY KEY (`page_id`,`permission_id`),
-  KEY `fk_page_permissions_permission` (`permission_id`),
-  CONSTRAINT `fk_page_permissions_page` FOREIGN KEY (`page_id`) REFERENCES `pages` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
-  CONSTRAINT `fk_page_permissions_permission` FOREIGN KEY (`permission_id`) REFERENCES `permissions` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+SET FOREIGN_KEY_CHECKS = 1;
+
+CREATE TABLE users (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(100) NOT NULL UNIQUE,
+    email VARCHAR(190) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    first_name VARCHAR(100) NOT NULL DEFAULT '',
+    last_name VARCHAR(100) NOT NULL DEFAULT '',
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    last_login_at DATETIME NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
 
---
--- Table structure for table `pages`
---
-
-DROP TABLE IF EXISTS `pages`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `pages` (
-  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
-  `parent_id` int(10) unsigned DEFAULT NULL,
-  `slug` varchar(100) NOT NULL,
-  `title` varchar(150) NOT NULL,
-  `is_public` tinyint(1) NOT NULL DEFAULT 0,
-  `menu_visible` tinyint(1) NOT NULL DEFAULT 1,
-  `sort_order` int(11) NOT NULL DEFAULT 100,
-  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
-  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_pages_slug` (`slug`),
-  KEY `fk_pages_parent` (`parent_id`),
-  CONSTRAINT `fk_pages_parent` FOREIGN KEY (`parent_id`) REFERENCES `pages` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=12 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Table structure for table `permissions`
---
-
-DROP TABLE IF EXISTS `permissions`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `permissions` (
-  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
-  `name` varchar(100) NOT NULL,
-  `description` varchar(255) DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_permissions_name` (`name`)
-) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Table structure for table `role_permissions`
---
-
-DROP TABLE IF EXISTS `role_permissions`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `role_permissions` (
-  `role_id` int(10) unsigned NOT NULL,
-  `permission_id` int(10) unsigned NOT NULL,
-  PRIMARY KEY (`role_id`,`permission_id`),
-  KEY `fk_role_permissions_permission` (`permission_id`),
-  CONSTRAINT `fk_role_permissions_permission` FOREIGN KEY (`permission_id`) REFERENCES `permissions` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
-  CONSTRAINT `fk_role_permissions_role` FOREIGN KEY (`role_id`) REFERENCES `roles` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+CREATE TABLE roles (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL UNIQUE,
+    description VARCHAR(255) NOT NULL DEFAULT '',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
 
---
--- Table structure for table `roles`
---
-
-DROP TABLE IF EXISTS `roles`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `roles` (
-  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
-  `name` varchar(100) NOT NULL,
-  `description` varchar(255) DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_roles_name` (`name`)
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Table structure for table `user_roles`
---
-
-DROP TABLE IF EXISTS `user_roles`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `user_roles` (
-  `user_id` int(10) unsigned NOT NULL,
-  `role_id` int(10) unsigned NOT NULL,
-  PRIMARY KEY (`user_id`,`role_id`),
-  KEY `fk_user_roles_role` (`role_id`),
-  CONSTRAINT `fk_user_roles_role` FOREIGN KEY (`role_id`) REFERENCES `roles` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
-  CONSTRAINT `fk_user_roles_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+CREATE TABLE permissions (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(150) NOT NULL UNIQUE,
+    description VARCHAR(255) NOT NULL DEFAULT '',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
 
---
--- Table structure for table `users`
---
+CREATE TABLE user_roles (
+    user_id INT UNSIGNED NOT NULL,
+    role_id INT UNSIGNED NOT NULL,
+    PRIMARY KEY (user_id, role_id),
+    CONSTRAINT fk_user_roles_user
+        FOREIGN KEY (user_id) REFERENCES users(id)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_user_roles_role
+        FOREIGN KEY (role_id) REFERENCES roles(id)
+        ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-DROP TABLE IF EXISTS `users`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `users` (
-  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
-  `username` varchar(100) NOT NULL,
-  `email` varchar(190) DEFAULT NULL,
-  `password_hash` varchar(255) NOT NULL,
-  `first_name` varchar(100) DEFAULT NULL,
-  `last_name` varchar(100) DEFAULT NULL,
-  `is_active` tinyint(1) NOT NULL DEFAULT 1,
-  `last_login_at` datetime DEFAULT NULL,
-  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
-  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_users_username` (`username`),
-  UNIQUE KEY `uq_users_email` (`email`)
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
-/*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
+CREATE TABLE role_permissions (
+    role_id INT UNSIGNED NOT NULL,
+    permission_id INT UNSIGNED NOT NULL,
+    PRIMARY KEY (role_id, permission_id),
+    CONSTRAINT fk_role_permissions_role
+        FOREIGN KEY (role_id) REFERENCES roles(id)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_role_permissions_permission
+        FOREIGN KEY (permission_id) REFERENCES permissions(id)
+        ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-/*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
-/*!40014 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS */;
-/*!40014 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS */;
-/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
-/*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
-/*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
-/*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
+CREATE TABLE pages (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    slug VARCHAR(100) NOT NULL UNIQUE,
+    title VARCHAR(150) NOT NULL,
+    file_path VARCHAR(255) NOT NULL,
+    is_public TINYINT(1) NOT NULL DEFAULT 0,
+    is_system TINYINT(1) NOT NULL DEFAULT 0,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_pages_is_public (is_public),
+    INDEX idx_pages_is_active (is_active)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Dump completed on 2026-04-16 13:25:54
+CREATE TABLE page_permissions (
+    page_id INT UNSIGNED NOT NULL,
+    permission_id INT UNSIGNED NOT NULL,
+    PRIMARY KEY (page_id, permission_id),
+    CONSTRAINT fk_page_permissions_page
+        FOREIGN KEY (page_id) REFERENCES pages(id)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_page_permissions_permission
+        FOREIGN KEY (permission_id) REFERENCES permissions(id)
+        ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE menu_items (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    parent_id INT UNSIGNED NULL,
+    page_id INT UNSIGNED NULL,
+    label VARCHAR(150) NOT NULL,
+    url VARCHAR(500) NULL,
+    menu_group VARCHAR(100) NOT NULL DEFAULT 'main',
+    target VARCHAR(20) NOT NULL DEFAULT '_self',
+    sort_order INT NOT NULL DEFAULT 100,
+    is_visible TINYINT(1) NOT NULL DEFAULT 1,
+    is_system TINYINT(1) NOT NULL DEFAULT 0,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_menu_items_parent
+        FOREIGN KEY (parent_id) REFERENCES menu_items(id)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_menu_items_page
+        FOREIGN KEY (page_id) REFERENCES pages(id)
+        ON DELETE SET NULL,
+    CONSTRAINT chk_menu_items_target
+        CHECK (target IN ('_self', '_blank')),
+    CONSTRAINT chk_menu_items_page_or_url
+        CHECK (
+            (page_id IS NOT NULL AND url IS NULL)
+            OR
+            (page_id IS NULL AND url IS NOT NULL)
+        ),
+    INDEX idx_menu_items_parent (parent_id),
+    INDEX idx_menu_items_page (page_id),
+    INDEX idx_menu_items_group_visible_sort (menu_group, is_visible, sort_order)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE menu_item_permissions (
+    menu_item_id INT UNSIGNED NOT NULL,
+    permission_id INT UNSIGNED NOT NULL,
+    PRIMARY KEY (menu_item_id, permission_id),
+    CONSTRAINT fk_menu_item_permissions_item
+        FOREIGN KEY (menu_item_id) REFERENCES menu_items(id)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_menu_item_permissions_permission
+        FOREIGN KEY (permission_id) REFERENCES permissions(id)
+        ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

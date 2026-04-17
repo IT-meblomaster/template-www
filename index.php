@@ -35,27 +35,41 @@ start_session($config);
 $pdo = db($config);
 
 $page = current_page();
-$pageFile = __DIR__ . '/pages/' . $page . '.php';
+$pageRecord = page_by_slug($pdo, $page);
+
+if (!$pageRecord || (int) $pageRecord['is_active'] !== 1) {
+    http_response_code(404);
+    $pageRecord = page_by_slug($pdo, 'forbidden');
+}
+
+if (!$pageRecord) {
+    http_response_code(500);
+    exit('Brak strony systemowej forbidden.');
+}
 
 if ($page === 'logout') {
     require __DIR__ . '/pages/logout.php';
     exit;
 }
 
-if (!is_file($pageFile)) {
-    http_response_code(404);
-    $page = 'forbidden';
-    $pageFile = __DIR__ . '/pages/forbidden.php';
-}
-
-if (!can_access_page($pdo, $page)) {
+if (!can_access_page($pdo, (string) $pageRecord['slug'])) {
     if (!is_logged_in()) {
         redirect('index.php?page=login');
     }
 
     http_response_code(403);
-    $page = 'forbidden';
-    $pageFile = __DIR__ . '/pages/forbidden.php';
+    $pageRecord = page_by_slug($pdo, 'forbidden');
+
+    if (!$pageRecord) {
+        exit('Brak strony systemowej forbidden.');
+    }
+}
+
+$pageFile = __DIR__ . '/' . ltrim((string) $pageRecord['file_path'], '/');
+
+if (!is_file($pageFile)) {
+    http_response_code(500);
+    exit('Brak pliku strony: ' . e((string) $pageRecord['file_path']));
 }
 
 require __DIR__ . '/pages/header.php';

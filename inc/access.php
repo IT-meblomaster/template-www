@@ -1,87 +1,101 @@
 <?php
+
 declare(strict_types=1);
 
-function get_user_permissions(PDO $pdo, int $userId): array
+function current_user_roles(PDO $pdo): array
 {
-    $stmt = $pdo->prepare("
+    if (!is_logged_in()) {
+        return [];
+    }
+
+    $stmt = $pdo->prepare('
+        SELECT r.id, r.name
+        FROM roles r
+        INNER JOIN user_roles ur ON ur.role_id = r.id
+        WHERE ur.user_id = :user_id
+        ORDER BY r.name
+    ');
+    $stmt->execute(['user_id' => current_user_id()]);
+
+    return $stmt->fetchAll() ?: [];
+}
+
+function current_user_permissions(PDO $pdo): array
+{
+    static $cache = null;
+
+    if ($cache !== null) {
+        return $cache;
+    }
+
+    if (!is_logged_in()) {
+        $cache = [];
+        return $cache;
+    }
+
+    $stmt = $pdo->prepare('
         SELECT DISTINCT p.name
         FROM permissions p
         INNER JOIN role_permissions rp ON rp.permission_id = p.id
         INNER JOIN user_roles ur ON ur.role_id = rp.role_id
         WHERE ur.user_id = :user_id
         ORDER BY p.name
-    ");
-    $stmt->execute(['user_id' => $userId]);
+    ');
+    $stmt->execute(['user_id' => current_user_id()]);
 
-    return array_column($stmt->fetchAll(), 'name');
+    $cache = array_values(array_map(
+        static fn (array $row): string => (string) $row['name'],
+        $stmt->fetchAll() ?: []
+    ));
+
+    return $cache;
 }
 
-function has_permission(PDO $pdo, string $permission): bool
+function has_permission(PDO $pdo, string $permissionName): bool
 {
-    if (!is_logged_in()) {
-        return false;
-    }
-
-    $userId = current_user_id();
-    if (!$userId) {
-        return false;
-    }
-
-    static $cache = [];
-
-    if (!isset($cache[$userId])) {
-        $cache[$userId] = get_user_permissions($pdo, $userId);
-    }
-
-    return in_array($permission, $cache[$userId], true);
+    return in_array($permissionName, current_user_permissions($pdo), true);
 }
 
-function get_page_permissions(PDO $pdo, string $pageSlug): array
+function page_by_slug(PDO $pdo, string $slug): ?array
 {
-    $stmt = $pdo->prepare("
-        SELECT p.name
-        FROM page_permissions pp
-        INNER JOIN pages pg ON pg.id = pp.page_id
-        INNER JOIN permissions p ON p.id = pp.permission_id
-        WHERE pg.slug = :slug
-        ORDER BY p.name
-    ");
-    $stmt->execute(['slug' => $pageSlug]);
-
-    return array_column($stmt->fetchAll(), 'name');
-}
-
-function get_page_by_slug(PDO $pdo, string $pageSlug): ?array
-{
-    $stmt = $pdo->prepare("
-        SELECT id, parent_id, slug, title, is_public, menu_visible, sort_order
+    $stmt = $pdo->prepare('
+        SELECT id, slug, title, file_path, is_public, is_system, is_active
         FROM pages
         WHERE slug = :slug
         LIMIT 1
-    ");
-    $stmt->execute(['slug' => $pageSlug]);
+    ');
+    $stmt->execute(['slug' => $slug]);
     $page = $stmt->fetch();
 
     return $page ?: null;
 }
 
-function page_has_children(PDO $pdo, int $pageId): bool
+function page_required_permissions(PDO $pdo, int $pageId): array
 {
-    $stmt = $pdo->prepare("
-        SELECT COUNT(*)
-        FROM pages
-        WHERE parent_id = :parent_id
-    ");
-    $stmt->execute(['parent_id' => $pageId]);
+    $stmt = $pdo->prepare('
+        SELECT p.name
+        FROM page_permissions pp
+        INNER JOIN permissions p ON p.id = pp.permission_id
+        WHERE pp.page_id = :page_id
+        ORDER BY p.name
+    ');
+    $stmt->execute(['page_id' => $pageId]);
 
-    return (int) $stmt->fetchColumn() > 0;
+    return array_values(array_map(
+        static fn (array $row): string => (string) $row['name'],
+        $stmt->fetchAll() ?: []
+    ));
 }
 
-function can_access_page(PDO $pdo, string $pageSlug): bool
+function can_access_page(PDO $pdo, string $slug): bool
 {
-    $page = get_page_by_slug($pdo, $pageSlug);
+    $page = page_by_slug($pdo, $slug);
 
     if (!$page) {
+        return false;
+    }
+
+    if ((int) $page['is_active'] !== 1) {
         return false;
     }
 
@@ -89,22 +103,20 @@ function can_access_page(PDO $pdo, string $pageSlug): bool
         return true;
     }
 
-    if (page_has_children($pdo, (int) $page['id'])) {
-        return false;
-    }
-
     if (!is_logged_in()) {
         return false;
     }
 
-    $requiredPermissions = get_page_permissions($pdo, $pageSlug);
+    $requiredPermissions = page_required_permissions($pdo, (int) $page['id']);
 
-    if (!$requiredPermissions) {
-        return false;
+    if ($requiredPermissions === []) {
+        return true;
     }
 
-    foreach ($requiredPermissions as $permission) {
-        if (has_permission($pdo, $permission)) {
+    $userPermissions = current_user_permissions($pdo);
+
+    foreach ($requiredPermissions as $requiredPermission) {
+        if (in_array($requiredPermission, $userPermissions, true)) {
             return true;
         }
     }
@@ -112,124 +124,123 @@ function can_access_page(PDO $pdo, string $pageSlug): bool
     return false;
 }
 
-function get_menu_pages(PDO $pdo): array
+function menu_item_required_permissions(PDO $pdo, int $menuItemId): array
 {
-    $stmt = $pdo->query("
-        SELECT
-            id,
-            slug,
-            title,
-            parent_id,
-            is_public,
-            menu_visible,
-            sort_order
-        FROM pages
-        WHERE menu_visible = 1
-        ORDER BY
-            CASE WHEN parent_id IS NULL THEN 0 ELSE 1 END,
-            parent_id,
-            sort_order,
-            title
-    ");
+    $stmt = $pdo->prepare('
+        SELECT p.name
+        FROM menu_item_permissions mip
+        INNER JOIN permissions p ON p.id = mip.permission_id
+        WHERE mip.menu_item_id = :menu_item_id
+        ORDER BY p.name
+    ');
+    $stmt->execute(['menu_item_id' => $menuItemId]);
 
-    return $stmt->fetchAll();
+    return array_values(array_map(
+        static fn (array $row): string => (string) $row['name'],
+        $stmt->fetchAll() ?: []
+    ));
 }
 
-function get_visible_menu_tree(PDO $pdo): array
+function can_view_menu_item(PDO $pdo, array $item): bool
 {
-    $pages = get_menu_pages($pdo);
-
-    $indexed = [];
-    foreach ($pages as $page) {
-        $page['children'] = [];
-        $indexed[(int) $page['id']] = $page;
+    if ((int) ($item['is_visible'] ?? 0) !== 1) {
+        return false;
     }
 
-    foreach ($indexed as $id => $page) {
-        $slug = (string) $page['slug'];
-        $isContainer = false;
+    $requiredPermissions = menu_item_required_permissions($pdo, (int) $item['id']);
+    if ($requiredPermissions !== []) {
+        if (!is_logged_in()) {
+            return false;
+        }
 
-        foreach ($indexed as $candidate) {
-            $candidateParentId = $candidate['parent_id'] !== null ? (int) $candidate['parent_id'] : null;
-            if ($candidateParentId === $id) {
-                $isContainer = true;
+        $userPermissions = current_user_permissions($pdo);
+        $hasAny = false;
+
+        foreach ($requiredPermissions as $requiredPermission) {
+            if (in_array($requiredPermission, $userPermissions, true)) {
+                $hasAny = true;
                 break;
             }
         }
 
-        if ($isContainer) {
-            continue;
-        }
-
-        if (!can_access_page($pdo, $slug)) {
-            unset($indexed[$id]);
+        if (!$hasAny) {
+            return false;
         }
     }
 
-    foreach ($indexed as $id => $page) {
-        $parentId = $page['parent_id'] !== null ? (int) $page['parent_id'] : null;
+    $pageSlug = $item['page_slug'] ?? null;
+    if (is_string($pageSlug) && $pageSlug !== '') {
+        return can_access_page($pdo, $pageSlug);
+    }
 
-        if ($parentId !== null && isset($indexed[$parentId])) {
-            $indexed[$parentId]['children'][] = &$indexed[$id];
+    return true;
+}
+
+function menu_item_href(array $item): string
+{
+    $pageSlug = $item['page_slug'] ?? null;
+    if (is_string($pageSlug) && $pageSlug !== '') {
+        return 'index.php?page=' . urlencode($pageSlug);
+    }
+
+    return (string) ($item['url'] ?? '#');
+}
+
+function menu_item_target(array $item): string
+{
+    $target = (string) ($item['target'] ?? '_self');
+    return in_array($target, ['_self', '_blank'], true) ? $target : '_self';
+}
+
+function get_visible_menu_tree(PDO $pdo, string $menuGroup = 'main'): array
+{
+    $stmt = $pdo->prepare('
+        SELECT
+            mi.id,
+            mi.parent_id,
+            mi.page_id,
+            mi.label,
+            mi.url,
+            mi.menu_group,
+            mi.target,
+            mi.sort_order,
+            mi.is_visible,
+            mi.is_system,
+            p.slug AS page_slug,
+            p.title AS page_title,
+            p.is_public AS page_is_public,
+            p.is_active AS page_is_active
+        FROM menu_items mi
+        LEFT JOIN pages p ON p.id = mi.page_id
+        WHERE mi.menu_group = :menu_group
+        ORDER BY mi.parent_id IS NULL DESC, mi.parent_id ASC, mi.sort_order ASC, mi.label ASC
+    ');
+    $stmt->execute(['menu_group' => $menuGroup]);
+    $rows = $stmt->fetchAll() ?: [];
+
+    $visible = [];
+    foreach ($rows as $row) {
+        if ((int) ($row['page_id'] ?? 0) > 0 && (int) ($row['page_is_active'] ?? 0) !== 1) {
+            continue;
+        }
+
+        if (can_view_menu_item($pdo, $row)) {
+            $row['children'] = [];
+            $visible[(int) $row['id']] = $row;
         }
     }
 
     $tree = [];
+    foreach ($visible as $id => &$item) {
+        $parentId = $item['parent_id'] !== null ? (int) $item['parent_id'] : null;
 
-    foreach ($indexed as $id => $page) {
-        $parentId = $page['parent_id'] !== null ? (int) $page['parent_id'] : null;
-
-        if ($parentId === null) {
-            $tree[] = &$indexed[$id];
+        if ($parentId !== null && isset($visible[$parentId])) {
+            $visible[$parentId]['children'][] = &$item;
+        } else {
+            $tree[] = &$item;
         }
     }
-
-    $tree = array_values($tree);
+    unset($item);
 
     return $tree;
-}
-
-function user_has_role(PDO $pdo, int $userId, string $roleName): bool
-{
-    $stmt = $pdo->prepare("
-        SELECT COUNT(*)
-        FROM user_roles ur
-        INNER JOIN roles r ON r.id = ur.role_id
-        WHERE ur.user_id = :user_id
-          AND r.name = :role_name
-    ");
-    $stmt->execute([
-        'user_id' => $userId,
-        'role_name' => $roleName,
-    ]);
-
-    return (int) $stmt->fetchColumn() > 0;
-}
-
-function count_active_administrators(PDO $pdo): int
-{
-    $stmt = $pdo->query("
-        SELECT COUNT(DISTINCT u.id)
-        FROM users u
-        INNER JOIN user_roles ur ON ur.user_id = u.id
-        INNER JOIN roles r ON r.id = ur.role_id
-        WHERE u.is_active = 1
-          AND r.name = 'Administrator'
-    ");
-
-    return (int) $stmt->fetchColumn();
-}
-
-function count_users_with_role(PDO $pdo, string $roleName): int
-{
-    $stmt = $pdo->prepare("
-        SELECT COUNT(DISTINCT u.id)
-        FROM users u
-        INNER JOIN user_roles ur ON ur.user_id = u.id
-        INNER JOIN roles r ON r.id = ur.role_id
-        WHERE r.name = :role_name
-    ");
-    $stmt->execute(['role_name' => $roleName]);
-
-    return (int) $stmt->fetchColumn();
 }
