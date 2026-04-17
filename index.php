@@ -37,6 +37,11 @@ $pdo = db($config);
 $page = current_page();
 $pageFile = __DIR__ . '/pages/' . $page . '.php';
 
+if ($page === 'logout') {
+    require __DIR__ . '/pages/logout.php';
+    exit;
+}
+
 if (!is_file($pageFile)) {
     http_response_code(404);
     $page = 'forbidden';
