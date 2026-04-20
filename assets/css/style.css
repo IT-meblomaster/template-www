@@ -158,14 +158,8 @@ table {
     font-size: 0.9rem;
 }
 
-
-.roles-table td:nth-child(1),
-.roles-table th:nth-child(1) {
-    min-width: 220px;
-}
-
-.roles-table td:nth-child(3),
-.roles-table th:nth-child(3) {
+.roles-table td:nth-child(4),
+.roles-table th:nth-child(4) {
     white-space: normal;
     word-break: break-word;
     overflow-wrap: anywhere;
@@ -249,6 +243,11 @@ table {
 .menu-item-label-external {
     background-color: #f8d7da;
     color: #842029;
+}
+
+.menu-item-label-separator {
+    background-color: #e2e3e5;
+    color: #41464b;
 }
 
 .menu-manager-legend {

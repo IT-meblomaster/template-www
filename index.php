@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+ob_start();
+
 $config = require __DIR__ . '/config/config.php';
 
 $debugEnabled = !empty($config['debug']);
@@ -75,3 +77,5 @@ if (!is_file($pageFile)) {
 require __DIR__ . '/pages/header.php';
 require $pageFile;
 require __DIR__ . '/pages/footer.php';
+
+ob_end_flush();

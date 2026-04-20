@@ -264,22 +264,39 @@ $users = $stmt->fetchAll();
         <?php else: ?>
             <div class="table-responsive">
                 <table class="table table-striped table-hover align-middle">
+                    <colgroup>
+                        <col style="width: 12%">
+                        <col style="width: 15%">
+                        <col style="width: 22%">
+                        <col style="width: 18%">
+                        <col style="width: 8%">
+                        <col style="width: 10%">
+                        <col style="width: 15%">
+                    </colgroup>
                     <thead>
                     <tr>
-                        <th>ID</th>
                         <th>Login</th>
                         <th>Imię i nazwisko</th>
                         <th>Email</th>
                         <th>Role</th>
                         <th>Status</th>
-                        <th>Ostatnie logowanie</th>
+                        <th>Ostatnie<br>logowanie</th>
                         <th class="text-end">Akcje</th>
                     </tr>
                     </thead>
                     <tbody>
                     <?php foreach ($users as $row): ?>
+                        <?php
+                            $lastLogin = $row['last_login_at'] ?? '';
+                            $lastLoginDate = '';
+                            $lastLoginTime = '';
+                            if ($lastLogin) {
+                                $dt = new DateTimeImmutable($lastLogin);
+                                $lastLoginDate = $dt->format('d.m.Y');
+                                $lastLoginTime = $dt->format('H:i');
+                            }
+                        ?>
                         <tr>
-                            <td><?= (int) $row['id'] ?></td>
                             <td><?= e($row['username']) ?></td>
                             <td><?= e(trim(($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? ''))) ?></td>
                             <td><?= e($row['email']) ?></td>
@@ -291,7 +308,14 @@ $users = $stmt->fetchAll();
                                     <span class="badge text-bg-secondary">Nieaktywny</span>
                                 <?php endif; ?>
                             </td>
-                            <td><?= e($row['last_login_at'] ?: '-') ?></td>
+                            <td>
+                                <?php if ($lastLogin): ?>
+                                    <?= e($lastLoginDate) ?><br>
+                                    <small class="text-muted"><?= e($lastLoginTime) ?></small>
+                                <?php else: ?>
+                                    -
+                                <?php endif; ?>
+                            </td>
                             <td class="text-end">
                                 <?php if (has_permission($pdo, 'users.manage')): ?>
                                     <a href="index.php?page=users&edit=<?= (int) $row['id'] ?>" class="btn btn-sm btn-outline-primary">

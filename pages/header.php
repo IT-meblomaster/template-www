@@ -33,6 +33,12 @@ function render_menu_tree(array $items, string $currentPage, int $level = 0): vo
         $href = menu_item_href($item);
         $target = menu_item_target($item);
         $isActive = ($pageSlug !== '' && $currentPage === $pageSlug) || ($hasChildren && menu_contains_current($children, $currentPage));
+        $isSeparator = str_starts_with((string) ($item['url'] ?? ''), 'internal:separator');
+
+        if ($isSeparator && $level > 0) {
+            echo '<li><hr class="dropdown-divider"></li>';
+            continue;
+        }
 
         if ($level === 0) {
             if ($hasChildren) {

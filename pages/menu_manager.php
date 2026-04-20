@@ -106,7 +106,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors[] = 'Etykieta pozycji menu jest wymagana.';
         }
 
-        if (!in_array($type, ['page', 'external', 'container'], true)) {
+        if (!in_array($type, ['page', 'external', 'container', 'separator'], true)) {
             $errors[] = 'Nieprawidłowy typ pozycji menu.';
         }
 
@@ -124,6 +124,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $errors[] = 'Dla linku zewnętrznego musisz podać URL.';
             }
             $pageId = 0;
+        } elseif ($type === 'separator') {
+            $pageId = 0;
+            $url = 'internal:separator';
+            $label = $label !== '' ? $label : '---';
         } else {
             $pageId = 0;
             $url = 'internal:container:' . preg_replace('/[^a-zA-Z0-9_-]/', '_', strtolower($label));
@@ -292,7 +296,7 @@ if ($editingMenuId > 0) {
         $menuToEdit = $found;
         $itemType = $menuToEdit['page_id']
             ? 'page'
-            : (((string) $menuToEdit['url'] !== '' && str_starts_with((string) $menuToEdit['url'], 'internal:container:')) ? 'container' : 'external');
+            : (str_starts_with((string) $menuToEdit['url'], 'internal:separator') ? 'separator' : (str_starts_with((string) $menuToEdit['url'], 'internal:container:') ? 'container' : 'external'));
         $modalTitle = 'Edytuj pozycję menu: ' . ($menuToEdit['label'] ?: ('#' . $menuToEdit['id']));
         $openModal = true;
 
@@ -397,11 +401,12 @@ $menuItems = $pdo->query("
                         <?php
                         $rowType = $row['page_id']
                             ? 'page'
-                            : (str_starts_with((string) $row['url'], 'internal:container:') ? 'container' : 'external');
+                            : (str_starts_with((string) $row['url'], 'internal:separator') ? 'separator' : (str_starts_with((string) $row['url'], 'internal:container:') ? 'container' : 'external'));
                         $rowDestination = $row['page_slug'] ? ('page=' . $row['page_slug']) : (string) $row['url'];
                         $badgeClass = match ($rowType) {
                             'page' => 'menu-item-label-page',
                             'container' => 'menu-item-label-container',
+                            'separator' => 'menu-item-label-separator',
                             default => 'menu-item-label-external',
                         };
                         ?>
@@ -450,6 +455,7 @@ $menuItems = $pdo->query("
                 <span class="menu-item-label menu-item-label-page">Strona</span>
                 <span class="menu-item-label menu-item-label-container">Kontener</span>
                 <span class="menu-item-label menu-item-label-external">Link zewnętrzny</span>
+                <span class="menu-item-label menu-item-label-separator">Separator</span>
             </div>
 
             <?php if (has_permission($pdo, 'menu.manage')): ?>
@@ -505,6 +511,7 @@ $menuItems = $pdo->query("
                                     <option value="page" <?= $itemType === 'page' ? 'selected' : '' ?>>Strona</option>
                                     <option value="external" <?= $itemType === 'external' ? 'selected' : '' ?>>Link zewnętrzny</option>
                                     <option value="container" <?= $itemType === 'container' ? 'selected' : '' ?>>Kontener</option>
+                                    <option value="separator" <?= $itemType === 'separator' ? 'selected' : '' ?>>Separator (kreska)</option>
                                 </select>
                             </div>
 

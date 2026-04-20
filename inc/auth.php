@@ -166,3 +166,33 @@ function save_user_roles(PDO $pdo, int $userId, array $roleIds): void
         ]);
     }
 }
+
+function user_has_role(PDO $pdo, int $userId, string $roleName): bool
+{
+    $stmt = $pdo->prepare('
+        SELECT 1
+        FROM user_roles ur
+        JOIN roles r ON r.id = ur.role_id
+        WHERE ur.user_id = :user_id
+          AND r.name = :role_name
+        LIMIT 1
+    ');
+    $stmt->execute(['user_id' => $userId, 'role_name' => $roleName]);
+
+    return (bool) $stmt->fetchColumn();
+}
+
+function count_active_administrators(PDO $pdo): int
+{
+    $stmt = $pdo->prepare('
+        SELECT COUNT(DISTINCT u.id)
+        FROM users u
+        JOIN user_roles ur ON ur.user_id = u.id
+        JOIN roles r ON r.id = ur.role_id
+        WHERE u.is_active = 1
+          AND r.name = :role_name
+    ');
+    $stmt->execute(['role_name' => 'Administrator']);
+
+    return (int) $stmt->fetchColumn();
+}
