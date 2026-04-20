@@ -149,10 +149,8 @@ $roles = $pdo->query("
         r.id,
         r.name,
         r.description,
-        COUNT(DISTINCT ur.user_id) AS users_count,
         GROUP_CONCAT(DISTINCT p.name ORDER BY p.name SEPARATOR ', ') AS permissions_list
     FROM roles r
-    LEFT JOIN user_roles ur ON ur.role_id = r.id
     LEFT JOIN role_permissions rp ON rp.role_id = r.id
     LEFT JOIN permissions p ON p.id = rp.permission_id
     GROUP BY
@@ -185,7 +183,6 @@ $permissions = $pdo->query("
                     <tr>
                         <th>Nazwa</th>
                         <th>Opis</th>
-                        <th>Użytkownicy</th>
                         <th class="roles-permissions-col">Uprawnienia</th>
                         <th class="text-end roles-actions-col">Akcje</th>
                     </tr>
@@ -195,7 +192,6 @@ $permissions = $pdo->query("
                         <tr>
                             <td><?= e($roleRow['name']) ?></td>
                             <td><?= e($roleRow['description'] ?: '-') ?></td>
-                            <td><?= (int) $roleRow['users_count'] ?></td>
                             <td class="roles-permissions-col"><?= e($roleRow['permissions_list'] ?: '-') ?></td>
                             <td class="text-end roles-actions-col">
                                 <?php if (has_permission($pdo, 'roles.manage')): ?>

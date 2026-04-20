@@ -158,8 +158,14 @@ table {
     font-size: 0.9rem;
 }
 
-.roles-table td:nth-child(4),
-.roles-table th:nth-child(4) {
+
+.roles-table td:nth-child(1),
+.roles-table th:nth-child(1) {
+    min-width: 220px;
+}
+
+.roles-table td:nth-child(3),
+.roles-table th:nth-child(3) {
     white-space: normal;
     word-break: break-word;
     overflow-wrap: anywhere;
